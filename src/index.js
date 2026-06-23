@@ -194,7 +194,12 @@ function parseArgs(argv) {
 
 function printHelp() {
 	console.log(
-		`StackWarden ${VERSION}\n\nUsage:\n  stackwarden audit [path] [--fast|--deep] [--json] [--ci]\n  stackwarden init [path] [--write] [--json]\n  stackwarden plan [path] [--json]\n  stackwarden hook pre-commit [--json] [--ci]\n  stackwarden check <commit-size|env-drift|docs-drift> [--json] [--strict]\n\nExamples:
+		`StackWarden ${VERSION}\n\nUsage:\n  stackwarden audit [path] [--fast|--deep] [--json] [--ci]\n  stackwarden init [path] [--write] [--json]\n  stackwarden plan [path] [--json]\n  stackwarden hook pre-commit [--json] [--ci]
+  stackwarden check <commit-size|env-drift|docs-drift|codeowners|workspaces|pipeline|agents|projections|governance> [--json] [--strict]
+  stackwarden generate <codeowners|workspaces|agents> [path] [--json]
+  stackwarden affected <checks|tests|builds|verify> [path] [--base origin/main] [--dry-run] [--json]
+
+Examples:
   stackwarden audit --fast\n  stackwarden audit . --deep --json\n  stackwarden init /tmp/repo --write\n  stackwarden plan .\n  stackwarden hook pre-commit\n  stackwarden check env-drift --json
   stackwarden check codeowners /tmp/repo --json
   stackwarden generate workspaces
@@ -1534,7 +1539,7 @@ function planPriority(finding) {
 	return "low";
 }
 
-export function runCheck(name, targetPath = ".", options = { json: false, ci: false, strict: false }) {
+export function runCheck(name, targetPath = ".", options = {}) {
 	const checkOptions = resolveCheckOptions(name, targetPath, options);
 	if (name === "commit-size") return checkCommitSize(targetPath, checkOptions);
 	if (name === "env-drift") return checkEnvDrift(targetPath, checkOptions);
@@ -1542,6 +1547,9 @@ export function runCheck(name, targetPath = ".", options = { json: false, ci: fa
 	if (name === "codeowners") return checkCodeownersCommand(targetPath, checkOptions);
 	if (name === "workspaces") return checkWorkspacesCommand(targetPath, checkOptions);
 	if (name === "pipeline") return checkPipelineCommand(targetPath, checkOptions);
+	if (name === "agents") return checkAgentsCommand(targetPath, checkOptions);
+	if (name === "projections") return checkProjectionsCommand(targetPath, checkOptions);
+	if (name === "governance") return checkGovernanceCommand(targetPath, checkOptions);
 	return {
 		schemaVersion: 1,
 		tool: { name: "stackwarden", version: VERSION },
@@ -1555,7 +1563,7 @@ export function runCheck(name, targetPath = ".", options = { json: false, ci: fa
 	};
 }
 
-function resolveCheckOptions(name, targetPath, options = { strict: false }) {
+function resolveCheckOptions(name, targetPath, options = {}) {
 	const policy = readCheckPolicy(targetPath, name);
 	const strict = Boolean(options.strict || policy.blocking);
 	return {
@@ -1583,6 +1591,9 @@ function checkConfigKey(name) {
 			codeowners: "codeowners",
 			workspaces: "workspaces",
 			pipeline: "pipeline",
+			agents: "agents",
+			projections: "projections",
+			governance: "governance",
 		}[name] ?? name
 	);
 }
@@ -2037,10 +2048,243 @@ stackwarden hook pre-commit
 `;
 }
 
-function runGenerate(name, targetPath = ".", options = { json: false }) {
+export function runGenerate(name, targetPath = ".", options = { json: false }) {
 	if (name === "codeowners") return generateCodeownersCommand(targetPath, options);
 	if (name === "workspaces") return generateWorkspacesCommand(targetPath, options);
+	if (name === "agents") return generateAgentsCommand(targetPath, options);
 	return unknownCommandResult("generate", name, options);
+}
+
+function generateAgentsCommand(targetPath = ".", _options = {}) {
+	const root = resolve(targetPath);
+	const result = evaluateAgents(root);
+	if (result.violations.length > 0) return result;
+	for (const [file, content] of result.outputs) {
+		mkdirSync(dirname(file), { recursive: true });
+		writeFileSync(file, content);
+	}
+	return { ...result, status: "generated", changed: result.stale.length > 0 };
+}
+
+function checkAgentsCommand(targetPath = ".", options = {}) {
+	const result = evaluateAgents(resolve(targetPath));
+	const violations = [
+		...result.violations,
+		...result.stale.map((file) => `${file} is stale. Run stackwarden generate agents.`),
+	];
+	return {
+		...result,
+		blocking: Boolean(options.strict && violations.length > 0),
+		wouldBlockIfStrict: violations.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: violations.length > 0 ? "failed" : "passed",
+		violations,
+	};
+}
+
+function evaluateAgents(root) {
+	const rulesPath = resolve(root, ".stackwarden/agent-rules.yml");
+	const agentsPath = resolve(root, ".stackwarden/agents.yml");
+	const violations = [];
+	if (!existsSync(rulesPath)) violations.push("missing agent rules source: .stackwarden/agent-rules.yml");
+	if (!existsSync(agentsPath)) violations.push("missing agents source: .stackwarden/agents.yml");
+	const rules = existsSync(rulesPath)
+		? parseAgentRules(readFileSync(rulesPath, "utf8"))
+		: { title: "Repository agent playbook", instructions: [], validation: [] };
+	const agents = existsSync(agentsPath) ? parseAgentsConfig(readFileSync(agentsPath, "utf8")) : [];
+	const outputs = new Map();
+	for (const agent of agents.filter((agent) => agent.enabled !== false)) {
+		if (!agent.target) {
+			violations.push(`agent ${agent.id || "<unknown>"} missing target`);
+			continue;
+		}
+		outputs.set(resolve(root, agent.target), renderAgentProjection(agent, rules));
+	}
+	const stale = [];
+	for (const [file, expected] of outputs) {
+		if (!existsSync(file) || readFileSync(file, "utf8") !== expected)
+			stale.push(normalizePath(file.slice(root.length + 1)));
+	}
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "agents",
+		blocking: false,
+		status: violations.length > 0 ? "failed" : stale.length > 0 ? "stale" : "passed",
+		violations,
+		warnings: [],
+		sources: [".stackwarden/agent-rules.yml", ".stackwarden/agents.yml"],
+		stale,
+		outputs,
+	};
+}
+
+function parseAgentRules(source) {
+	const rules = /** @type {any} */ ({ title: "Repository agent playbook", instructions: [], validation: [] });
+	let listKey = "";
+	for (const rawLine of source.replace(/\r/g, "").split("\n")) {
+		const lineWithoutComment = rawLine.replace(/\s+#.*$/, "");
+		if (!lineWithoutComment.trim()) continue;
+		const indent = lineWithoutComment.match(/^\s*/)?.[0].length ?? 0;
+		const line = lineWithoutComment.trim();
+		if (indent === 0) {
+			const scalar = line.match(/^(title|name):\s*(.*)$/);
+			if (scalar && scalar[1] === "title") rules.title = cleanYamlScalar(scalar[2]);
+			if (line === "instructions:" || line === "validation:") listKey = line.slice(0, -1);
+			else if (!line.endsWith(":")) listKey = "";
+			continue;
+		}
+		if (line.startsWith("- ") && (listKey === "instructions" || listKey === "validation"))
+			rules[listKey].push(cleanYamlScalar(line.slice(2)));
+	}
+	return rules;
+}
+
+function parseAgentsConfig(source) {
+	const agents = /** @type {any[]} */ ([]);
+	let section = "";
+	/** @type {any} */
+	let current;
+	for (const rawLine of source.replace(/\r/g, "").split("\n")) {
+		const lineWithoutComment = rawLine.replace(/\s+#.*$/, "");
+		if (!lineWithoutComment.trim()) continue;
+		const indent = lineWithoutComment.match(/^\s*/)?.[0].length ?? 0;
+		const line = lineWithoutComment.trim();
+		if (indent === 0) {
+			section = line.endsWith(":") ? line.slice(0, -1) : "";
+			current = undefined;
+			continue;
+		}
+		if (section !== "agents") continue;
+		if (indent === 2 && line.startsWith("- id:")) {
+			current = { id: cleanYamlScalar(line.replace(/^- id:\s*/, "")), target: "", enabled: true };
+			agents.push(current);
+			continue;
+		}
+		if (!current) continue;
+		const field = line.match(/^(target|format):\s*(.*)$/);
+		if (field) current[field[1]] = cleanYamlScalar(field[2]);
+		const enabled = line.match(/^enabled:\s*(true|false)\s*$/);
+		if (enabled) current.enabled = enabled[1] === "true";
+	}
+	return agents;
+}
+
+function renderAgentProjection(agent, rules) {
+	return [
+		"<!-- generated-from: .stackwarden/agent-rules.yml + .stackwarden/agents.yml -->",
+		`# ${rules.title}`,
+		"",
+		`Target agent: \`${agent.id}\``,
+		"",
+		"## Operating rules",
+		"",
+		...(rules.instructions.length > 0
+			? rules.instructions.map((rule) => `- ${rule}`)
+			: ["- Follow repository governance before changing durable behavior."]),
+		"",
+		"## Validation",
+		"",
+		...(rules.validation.length > 0
+			? rules.validation.map((command) => `- \`${command}\``)
+			: ["- Run the checks declared by repository maintainers."]),
+		"<!-- /generated-from: .stackwarden/agent-rules.yml -->",
+		"",
+	].join("\n");
+}
+
+function checkProjectionsCommand(targetPath = ".", options = {}) {
+	const root = resolve(targetPath);
+	const sourcePath = resolve(root, ".stackwarden/projections.yml");
+	const violations = [];
+	if (!existsSync(sourcePath)) violations.push("missing projection source: .stackwarden/projections.yml");
+	const projections = existsSync(sourcePath) ? parseProjectionRegistry(readFileSync(sourcePath, "utf8")) : [];
+	for (const projection of projections) {
+		for (const key of ["id", "source", "generator", "checker"])
+			if (!projection[key]) violations.push(`projection ${projection.id || "<unknown>"} missing ${key}`);
+		if (!projection.targets?.length) violations.push(`projection ${projection.id || "<unknown>"} missing targets`);
+		if (projection.source && !existsSync(resolve(root, projection.source)))
+			violations.push(`projection ${projection.id} source does not exist: ${projection.source}`);
+		for (const target of projection.targets ?? []) {
+			const targetPath = resolve(root, target);
+			if (!existsSync(targetPath)) continue;
+			const body = readFileSync(targetPath, "utf8").slice(0, 1000);
+			if (/\.(md|mdc|txt|ya?ml|json)$/i.test(target) && !body.includes("generated-from:"))
+				violations.push(`projection ${projection.id} target missing generated-from marker: ${target}`);
+		}
+	}
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "projections",
+		blocking: Boolean(options.strict && violations.length > 0),
+		wouldBlockIfStrict: violations.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: violations.length > 0 ? "failed" : "passed",
+		violations,
+		warnings: [],
+		projections,
+	};
+}
+
+function parseProjectionRegistry(source) {
+	const projections = /** @type {any[]} */ ([]);
+	let section = "";
+	let listKey = "";
+	/** @type {any} */
+	let current;
+	for (const rawLine of source.replace(/\r/g, "").split("\n")) {
+		const lineWithoutComment = rawLine.replace(/\s+#.*$/, "");
+		if (!lineWithoutComment.trim()) continue;
+		const indent = lineWithoutComment.match(/^\s*/)?.[0].length ?? 0;
+		const line = lineWithoutComment.trim();
+		if (indent === 0) {
+			section = line.endsWith(":") ? line.slice(0, -1) : "";
+			current = undefined;
+			listKey = "";
+			continue;
+		}
+		if (section !== "projections") continue;
+		if (indent === 2 && line.startsWith("- id:")) {
+			current = { id: cleanYamlScalar(line.replace(/^- id:\s*/, "")), additionalSources: [], targets: [] };
+			projections.push(current);
+			listKey = "";
+			continue;
+		}
+		if (!current) continue;
+		const scalar = line.match(/^(source|generator|checker):\s*(.*)$/);
+		if (scalar) {
+			current[scalar[1]] = cleanYamlScalar(scalar[2]);
+			listKey = "";
+			continue;
+		}
+		if (line === "targets:" || line === "additionalSources:") {
+			listKey = line.slice(0, -1);
+			continue;
+		}
+		if (line.startsWith("- ") && listKey) current[listKey].push(cleanYamlScalar(line.slice(2)));
+	}
+	return projections;
+}
+
+function checkGovernanceCommand(targetPath = ".", options = {}) {
+	const checks = ["projections", "agents", "codeowners", "workspaces", "pipeline"].map((name) =>
+		runCheck(name, targetPath, options),
+	);
+	const violations = checks.flatMap((check) => check.violations ?? []);
+	const warnings = checks.flatMap((check) => check.warnings ?? []);
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "governance",
+		blocking: Boolean(options.strict && violations.length > 0),
+		wouldBlockIfStrict: violations.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: violations.length > 0 ? "failed" : warnings.length > 0 ? "warning" : "passed",
+		violations,
+		warnings,
+		checks,
+	};
 }
 
 function checkPipelineCommand(targetPath = ".", options = {}) {

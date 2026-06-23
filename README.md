@@ -33,6 +33,10 @@ npx stackwarden check workspaces --json
 npx stackwarden generate codeowners
 npx stackwarden generate workspaces
 npx stackwarden affected verify --base origin/main --dry-run
+npx stackwarden generate agents
+npx stackwarden check agents
+npx stackwarden check projections
+npx stackwarden check governance
 ```
 
 ## Executable checks
@@ -45,6 +49,9 @@ StackWarden includes side-effect-free local checks. They observe, evaluate, and 
 - `stackwarden check codeowners` / `stackwarden generate codeowners` — keeps `.github/CODEOWNERS` generated from `.stackwarden/ownership.yml`.
 - `stackwarden check workspaces` / `stackwarden generate workspaces` — keeps root and workspace README projections generated from `.stackwarden/workspaces.yml`.
 - `stackwarden check pipeline` / `stackwarden affected verify` — validates `.stackwarden/pipeline.yml` and runs or previews affected checks/tests/builds.
+- `stackwarden generate agents` / `stackwarden check agents` — keeps agent instructions generated from `.stackwarden/agent-rules.yml` and `.stackwarden/agents.yml`.
+- `stackwarden check projections` — validates `.stackwarden/projections.yml` source/target/generator/checker edges.
+- `stackwarden check governance` — aggregate governance freshness check for projections, agents, ownership, workspaces, and pipeline.
 
 ## Commit-time feedback loop
 

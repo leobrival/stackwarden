@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { checkConfigSchemas } from "../scripts/check-config-schemas.mjs";
-import { auditRepository, initRepository, planRepository, runCheck, runPreCommitHook } from "./index.js";
+import { auditRepository, initRepository, planRepository, runCheck, runGenerate, runPreCommitHook } from "./index.js";
 
 function createRepo(prefix) {
 	const root = mkdtempSync(join(tmpdir(), prefix));
@@ -725,6 +725,103 @@ test("Business scenario: capabilities and repo config init is dry-run first and 
 			{ path: ".stackwarden/lefthook.yml", action: "skip-existing" },
 			{ path: ".stackwarden/hooks/pre-commit", action: "skip-existing" },
 		]);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Business scenario: agent instructions are generated from StackWarden source of truth", () => {
+	const root = createRepo("stackwarden-business-agent-projections-");
+	try {
+		mkdirSync(join(root, ".stackwarden"));
+		writeFileSync(
+			join(root, ".stackwarden/agent-rules.yml"),
+			`version: 1
+name: repo-agent-rules
+title: Repository agent playbook
+instructions:
+  - Run \`bun run test\` before declaring work complete.
+  - Do not read secrets or local env files.
+validation:
+  - bun run test
+`,
+		);
+		writeFileSync(
+			join(root, ".stackwarden/agents.yml"),
+			`version: 1
+name: repo-agents
+agents:
+  - id: agents-md
+    target: AGENTS.md
+    enabled: true
+  - id: claude
+    target: CLAUDE.md
+    enabled: true
+`,
+		);
+
+		const generated = runGenerate("agents", root, { json: true });
+		assert.equal(generated.status, "generated");
+		assert.equal(existsSync(join(root, "AGENTS.md")), true);
+		assert.match(readFileSync(join(root, "AGENTS.md"), "utf8"), /generated-from: \.stackwarden\/agent-rules.yml/);
+		assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /Run `bun run test`/);
+
+		const fresh = runCheck("agents", root, { json: true });
+		assert.equal(fresh.status, "passed");
+
+		writeFileSync(join(root, "AGENTS.md"), "manual drift\n");
+		const stale = runCheck("agents", root, { json: true, strict: true });
+		assert.equal(stale.status, "failed");
+		assert.equal(stale.blocking, true);
+		assert.ok(stale.violations.some((violation) => violation.includes("AGENTS.md is stale")));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Business scenario: projection registry validates generated agent documentation edges", () => {
+	const root = createRepo("stackwarden-business-projection-registry-");
+	try {
+		mkdirSync(join(root, ".stackwarden"));
+		writeFileSync(join(root, ".stackwarden/agent-rules.yml"), "version: 1\ninstructions:\n  - Keep tests aligned.\n");
+		writeFileSync(
+			join(root, ".stackwarden/agents.yml"),
+			"version: 1\nagents:\n  - id: agents-md\n    target: AGENTS.md\n",
+		);
+		writeFileSync(
+			join(root, ".stackwarden/projections.yml"),
+			`version: 1
+projections:
+  - id: agents
+    source: .stackwarden/agent-rules.yml
+    additionalSources:
+      - .stackwarden/agents.yml
+    targets:
+      - AGENTS.md
+    generator: stackwarden generate agents
+    checker: stackwarden check agents
+`,
+		);
+		runGenerate("agents", root, { json: true });
+
+		const projections = runCheck("projections", root, { json: true });
+		assert.equal(projections.status, "passed");
+
+		writeFileSync(
+			join(root, ".stackwarden/projections.yml"),
+			`version: 1
+projections:
+  - id: agents
+    source: .stackwarden/agent-rules.yml
+    targets:
+      - AGENTS.md
+    generator: stackwarden generate agents
+`,
+		);
+		const drift = runCheck("projections", root, { json: true, strict: true });
+		assert.equal(drift.status, "failed");
+		assert.equal(drift.blocking, true);
+		assert.ok(drift.violations.some((violation) => violation.includes("missing checker")));
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

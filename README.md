@@ -28,6 +28,11 @@ npx stackwarden hook pre-commit
 npx stackwarden check env-drift --json
 npx stackwarden check docs-drift --json
 npx stackwarden check commit-size --json
+npx stackwarden check codeowners --json
+npx stackwarden check workspaces --json
+npx stackwarden generate codeowners
+npx stackwarden generate workspaces
+npx stackwarden affected verify --base origin/main --dry-run
 ```
 
 ## Executable checks
@@ -37,6 +42,9 @@ StackWarden includes side-effect-free local checks. They observe, evaluate, and 
 - `stackwarden check commit-size` — staged commit size guard.
 - `stackwarden check env-drift` — compares `.env.example` keys with local env files without printing values.
 - `stackwarden check docs-drift` — detects generated documentation without provenance markers and duplicate Markdown surfaces.
+- `stackwarden check codeowners` / `stackwarden generate codeowners` — keeps `.github/CODEOWNERS` generated from `.stackwarden/ownership.yml`.
+- `stackwarden check workspaces` / `stackwarden generate workspaces` — keeps root and workspace README projections generated from `.stackwarden/workspaces.yml`.
+- `stackwarden check pipeline` / `stackwarden affected verify` — validates `.stackwarden/pipeline.yml` and runs or previews affected checks/tests/builds.
 
 ## Commit-time feedback loop
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -129,6 +129,20 @@ function main(argv = process.argv.slice(2)) {
 		process.exitCode = result.blocking && options.ci ? 1 : 0;
 		return;
 	}
+	if (command === "generate") {
+		const result = runGenerate(checkName ?? path, checkName ? path : ".", options);
+		if (options.json) console.log(JSON.stringify(result, null, 2));
+		else printGenerateResult(result);
+		process.exitCode = result.blocking ? 1 : 0;
+		return;
+	}
+	if (command === "affected") {
+		const result = runAffected(checkName ?? path, checkName ? path : ".", options);
+		if (options.json) console.log(JSON.stringify(result, null, 2));
+		else printAffectedResult(result);
+		process.exitCode = result.blocking ? 1 : 0;
+		return;
+	}
 	if (command === "check") {
 		const result = runCheck(checkName ?? path, checkName ? path : ".", options);
 		if (options.json) console.log(JSON.stringify(result, null, 2));
@@ -142,7 +156,7 @@ function main(argv = process.argv.slice(2)) {
 }
 
 function parseArgs(argv) {
-	/** @type {AuditOptions & { write: boolean, help: boolean, version: boolean, ci: boolean, strict: boolean }} */
+	/** @type {AuditOptions & { write: boolean, help: boolean, version: boolean, ci: boolean, strict: boolean, dryRun: boolean, base?: string }} */
 	const options = {
 		mode: "fast",
 		json: false,
@@ -152,22 +166,27 @@ function parseArgs(argv) {
 		version: false,
 		ci: false,
 		strict: false,
+		dryRun: false,
 	};
 	let command;
 	let checkName;
 	let path = ".";
-	for (const arg of argv) {
+	for (let index = 0; index < argv.length; index += 1) {
+		const arg = argv[index];
 		if (arg === "--fast") options.mode = "fast";
 		else if (arg === "--deep") options.mode = "deep";
 		else if (arg === "--json") options.json = true;
 		else if (arg === "--verbose") options.verbose = true;
 		else if (arg === "--write") options.write = true;
+		else if (arg === "--dry-run") options.dryRun = true;
+		else if (arg === "--base") options.base = argv[++index];
+		else if (arg.startsWith("--base=")) options.base = arg.slice("--base=".length);
 		else if (arg === "--ci") options.ci = true;
 		else if (arg === "--strict") options.strict = true;
 		else if (arg === "--help" || arg === "-h") options.help = true;
 		else if (arg === "--version" || arg === "-v") options.version = true;
 		else if (!command) command = arg;
-		else if (command === "check" && !checkName) checkName = arg;
+		else if (["check", "generate", "affected"].includes(command) && !checkName) checkName = arg;
 		else path = arg;
 	}
 	return { command: command ?? "help", path, checkName, options };
@@ -177,7 +196,9 @@ function printHelp() {
 	console.log(
 		`StackWarden ${VERSION}\n\nUsage:\n  stackwarden audit [path] [--fast|--deep] [--json] [--ci]\n  stackwarden init [path] [--write] [--json]\n  stackwarden plan [path] [--json]\n  stackwarden hook pre-commit [--json] [--ci]\n  stackwarden check <commit-size|env-drift|docs-drift> [--json] [--strict]\n\nExamples:
   stackwarden audit --fast\n  stackwarden audit . --deep --json\n  stackwarden init /tmp/repo --write\n  stackwarden plan .\n  stackwarden hook pre-commit\n  stackwarden check env-drift --json
-  stackwarden check env-drift /tmp/repo --json`,
+  stackwarden check codeowners /tmp/repo --json
+  stackwarden generate workspaces
+  stackwarden affected verify --base origin/main --dry-run`,
 	);
 }
 
@@ -1518,11 +1539,16 @@ export function runCheck(name, targetPath = ".", options = { json: false, ci: fa
 	if (name === "commit-size") return checkCommitSize(targetPath, checkOptions);
 	if (name === "env-drift") return checkEnvDrift(targetPath, checkOptions);
 	if (name === "docs-drift") return checkDocsDrift(targetPath, checkOptions);
+	if (name === "codeowners") return checkCodeownersCommand(targetPath, checkOptions);
+	if (name === "workspaces") return checkWorkspacesCommand(targetPath, checkOptions);
+	if (name === "pipeline") return checkPipelineCommand(targetPath, checkOptions);
 	return {
 		schemaVersion: 1,
 		tool: { name: "stackwarden", version: VERSION },
 		check: name,
 		blocking: Boolean(options.strict),
+		wouldBlockIfStrict: true,
+		enforcement: options.strict ? "strict" : "advisory",
 		status: "unknown-check",
 		violations: [`Unknown check: ${name}`],
 		warnings: [],
@@ -1554,6 +1580,9 @@ function checkConfigKey(name) {
 			"commit-size": "commitSize",
 			"env-drift": "envDrift",
 			"docs-drift": "documentationDrift",
+			codeowners: "codeowners",
+			workspaces: "workspaces",
+			pipeline: "pipeline",
 		}[name] ?? name
 	);
 }
@@ -1701,7 +1730,7 @@ function printCheckResult(result) {
 export function runPreCommitHook(targetPath = ".", options = { json: false, ci: false, strict: false }) {
 	const report = auditRepository(targetPath, { mode: "fast", json: Boolean(options.json), verbose: false });
 	const commitSizeCheck = runCheck("commit-size", targetPath, options);
-	const commitSize = commitSizeCheck.commitSize;
+	const commitSize = /** @type {any} */ (commitSizeCheck).commitSize;
 	const blocking = Boolean(commitSizeCheck.blocking);
 	return {
 		schemaVersion: 1,
@@ -2006,6 +2035,792 @@ set -eu
 # Advisory local loop: runs a fast StackWarden audit and commit-size guard.
 stackwarden hook pre-commit
 `;
+}
+
+function runGenerate(name, targetPath = ".", options = { json: false }) {
+	if (name === "codeowners") return generateCodeownersCommand(targetPath, options);
+	if (name === "workspaces") return generateWorkspacesCommand(targetPath, options);
+	return unknownCommandResult("generate", name, options);
+}
+
+function checkPipelineCommand(targetPath = ".", options = {}) {
+	const violations = [];
+	let config;
+	try {
+		config = loadStackwardenPipelineConfig(resolve(targetPath));
+	} catch (error) {
+		violations.push(error instanceof Error ? error.message : String(error));
+	}
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "pipeline",
+		blocking: Boolean(options.strict && violations.length > 0),
+		wouldBlockIfStrict: violations.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: violations.length > 0 ? "failed" : "passed",
+		violations,
+		warnings: [],
+		config,
+	};
+}
+
+function runAffected(mode = "verify", targetPath = ".", options = { json: false, dryRun: false }) {
+	if (!["checks", "tests", "builds", "verify"].includes(mode)) return unknownCommandResult("affected", mode, options);
+	const root = resolve(targetPath);
+	const config = loadStackwardenPipelineConfig(root);
+	const files = changedFiles(root, options.base ?? config.defaults.baseRef);
+	const plan = planAffectedFiles(files, config);
+	const commands =
+		mode === "checks"
+			? plan.checks
+			: mode === "tests"
+				? plan.tests
+				: mode === "builds"
+					? plan.builds
+					: [...plan.checks, ...plan.tests, ...plan.builds];
+	const executed = [];
+	const full = process.env.RUN_FULL_GATES === "1";
+	const fullCommands =
+		mode === "builds"
+			? config.defaults.fullBuilds
+			: mode === "tests"
+				? config.defaults.fullTests
+				: [...config.defaults.fullChecks, ...config.defaults.fullTests, ...config.defaults.fullBuilds];
+	const selectedCommands = full ? fullCommands : commands;
+	for (const command of selectedCommands) {
+		executed.push(command);
+		if (options.dryRun) continue;
+		const result = spawnSync(command, { cwd: root, shell: true, stdio: "inherit", env: process.env });
+		if (result.status !== 0) {
+			return {
+				schemaVersion: 1,
+				tool: { name: "stackwarden", version: VERSION },
+				command: "affected",
+				mode,
+				blocking: true,
+				status: "failed",
+				violations: [`affected command failed: ${command}`],
+				warnings: [],
+				plan,
+				executed,
+			};
+		}
+	}
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		command: "affected",
+		mode,
+		blocking: false,
+		status: "passed",
+		violations: [],
+		warnings: [],
+		baseRef: options.base ?? config.defaults.baseRef,
+		dryRun: Boolean(options.dryRun),
+		full,
+		plan,
+		executed,
+	};
+}
+
+function unknownCommandResult(command, name, options = {}) {
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		command,
+		name,
+		blocking: Boolean(options.strict),
+		status: "unknown-command",
+		violations: [`Unknown ${command} target: ${name}`],
+		warnings: [],
+	};
+}
+
+function generateCodeownersCommand(targetPath = ".", options = {}) {
+	const root = resolve(targetPath);
+	const result = evaluateCodeowners(root);
+	if (result.violations.length > 0) return result;
+	if (options.write === false) return result;
+	mkdirSync(dirname(result.targetPath), { recursive: true });
+	writeFileSync(result.targetPath, result.expected);
+	return { ...result, status: "generated", changed: result.current !== result.expected };
+}
+
+function checkCodeownersCommand(targetPath = ".", options = {}) {
+	const result = evaluateCodeowners(resolve(targetPath));
+	const stale = result.violations.length === 0 && result.current !== result.expected;
+	const violations = [
+		...result.violations,
+		...(stale ? [`${result.target} is stale. Run stackwarden generate codeowners.`] : []),
+	];
+	return {
+		...result,
+		blocking: Boolean(options.strict && violations.length > 0),
+		wouldBlockIfStrict: violations.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: violations.length > 0 ? "failed" : "passed",
+		violations,
+	};
+}
+
+function evaluateCodeowners(root) {
+	const sourcePath = resolve(root, ".stackwarden/ownership.yml");
+	const violations = [];
+	if (!existsSync(sourcePath)) violations.push("missing ownership source: .stackwarden/ownership.yml");
+	const config = existsSync(sourcePath)
+		? parseOwnershipConfig(readFileSync(sourcePath, "utf8"))
+		: defaultOwnershipConfig();
+	violations.push(...validateOwnershipWorkspaceCoverage(root, config));
+	const target = config.generatedTarget ?? ".github/CODEOWNERS";
+	const targetPath = resolve(root, target);
+	const expected = renderCodeowners(config);
+	const current = existsSync(targetPath) ? readFileSync(targetPath, "utf8") : "";
+	if (!existsSync(targetPath)) violations.push(`missing generated CODEOWNERS target: ${target}`);
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "codeowners",
+		blocking: false,
+		status: violations.length > 0 ? "failed" : "passed",
+		violations,
+		warnings: [],
+		source: ".stackwarden/ownership.yml",
+		target,
+		targetPath,
+		expected,
+		current,
+	};
+}
+
+/** @returns {any} */
+function defaultOwnershipConfig() {
+	return {
+		generatedTarget: ".github/CODEOWNERS",
+		ownerSets: {},
+		workspaceRegistry: {
+			source: "package.json",
+			requirePackageJsonCoverage: true,
+			emitCodeownersRules: false,
+			workspaces: [],
+		},
+		sections: [],
+	};
+}
+
+function parseOwnershipConfig(source) {
+	const config = /** @type {any} */ (defaultOwnershipConfig());
+	let section = "";
+	let workspaceList = false;
+	/** @type {any} */
+	let currentWorkspace;
+	/** @type {any} */
+	let currentCodeownersSection;
+	/** @type {any} */
+	let currentRule;
+	let currentOwnerSet = "";
+	let listKey = "";
+	for (const rawLine of source.replace(/\r/g, "").split("\n")) {
+		const lineWithoutComment = rawLine.replace(/\s+#.*$/, "");
+		if (!lineWithoutComment.trim()) continue;
+		const indent = lineWithoutComment.match(/^\s*/)?.[0].length ?? 0;
+		const line = lineWithoutComment.trim();
+		if (indent === 0) {
+			const topKey = line.match(/^(\w+):\s*(.*)$/);
+			if (topKey) {
+				section = topKey[1];
+				workspaceList = false;
+				currentWorkspace = undefined;
+				currentCodeownersSection = undefined;
+				currentRule = undefined;
+				listKey = "";
+				if (topKey[1] === "generatedTarget") config.generatedTarget = cleanYamlScalar(topKey[2]);
+			}
+			continue;
+		}
+		if (section === "ownerSets") {
+			if (indent === 2 && line.endsWith(":")) {
+				currentOwnerSet = line.slice(0, -1);
+				config.ownerSets[currentOwnerSet] = [];
+				listKey = "ownerSet";
+				continue;
+			}
+			if (line.startsWith("- ") && listKey === "ownerSet" && currentOwnerSet)
+				config.ownerSets[currentOwnerSet].push(cleanYamlScalar(line.slice(2)));
+			continue;
+		}
+		if (section === "workspaceRegistry") {
+			const scalar = line.match(/^(source|requirePackageJsonCoverage|emitCodeownersRules):\s*(.*)$/);
+			if (scalar) {
+				const [, key, value] = scalar;
+				if (key === "source") config.workspaceRegistry.source = cleanYamlScalar(value);
+				if (key === "requirePackageJsonCoverage")
+					config.workspaceRegistry.requirePackageJsonCoverage = value.trim() === "true";
+				if (key === "emitCodeownersRules") config.workspaceRegistry.emitCodeownersRules = value.trim() === "true";
+				continue;
+			}
+			if (line === "workspaces:") {
+				workspaceList = true;
+				continue;
+			}
+			if (workspaceList && line.startsWith("- path:")) {
+				currentWorkspace = { path: cleanYamlScalar(line.replace(/^- path:\s*/, "")), owners: [] };
+				config.workspaceRegistry.workspaces.push(currentWorkspace);
+				listKey = "";
+				continue;
+			}
+			if (workspaceList && line === "owners:") {
+				listKey = "workspaceOwners";
+				continue;
+			}
+			if (workspaceList && line.startsWith("- ") && listKey === "workspaceOwners" && currentWorkspace)
+				currentWorkspace.owners.push(cleanYamlScalar(line.slice(2)));
+			continue;
+		}
+		if (section === "sections") {
+			if (indent === 2 && line.startsWith("- title:")) {
+				currentCodeownersSection = { title: cleanYamlScalar(line.replace(/^- title:\s*/, "")), rules: [] };
+				config.sections.push(currentCodeownersSection);
+				currentRule = undefined;
+				listKey = "";
+				continue;
+			}
+			const sectionOwnerSet = line.match(/^ownerSet:\s*(.*)$/);
+			if (sectionOwnerSet && currentCodeownersSection && !currentRule) {
+				currentCodeownersSection.ownerSet = cleanYamlScalar(sectionOwnerSet[1]);
+				continue;
+			}
+			if (line === "rules:") continue;
+			if (line.startsWith("- path:")) {
+				currentRule = { path: cleanYamlScalar(line.replace(/^- path:\s*/, "")), owners: [] };
+				currentCodeownersSection?.rules.push(currentRule);
+				listKey = "";
+				continue;
+			}
+			const ruleOwnerSet = line.match(/^ownerSet:\s*(.*)$/);
+			if (ruleOwnerSet && currentRule) {
+				currentRule.ownerSet = cleanYamlScalar(ruleOwnerSet[1]);
+				continue;
+			}
+			const owners = line.match(/^owners:\s*(.*)$/);
+			if (owners && currentRule) {
+				const inlineOwners = parseInlineYamlArray(owners[1]);
+				if (inlineOwners.length > 0) currentRule.owners = inlineOwners;
+				else listKey = "ruleOwners";
+				continue;
+			}
+			if (line.startsWith("- ") && listKey === "ruleOwners" && currentRule)
+				currentRule.owners.push(cleanYamlScalar(line.slice(2)));
+		}
+	}
+	for (const codeownersSection of config.sections) {
+		for (const rule of codeownersSection.rules) {
+			const ownerSet = rule.ownerSet ?? codeownersSection.ownerSet;
+			if (rule.owners.length === 0 && ownerSet) rule.owners = config.ownerSets[ownerSet] ?? [];
+		}
+	}
+	return config;
+}
+
+function validateOwnershipWorkspaceCoverage(root, config) {
+	if (!config.workspaceRegistry.requirePackageJsonCoverage) return [];
+	const packageWorkspaces = loadPackageWorkspaces(root, config.workspaceRegistry.source);
+	const declared = new Set(config.workspaceRegistry.workspaces.map((workspace) => workspace.path));
+	const violations = [];
+	for (const workspace of packageWorkspaces)
+		if (!declared.has(workspace))
+			violations.push(`package.json workspace missing from .stackwarden/ownership.yml: ${workspace}`);
+	for (const workspace of declared)
+		if (!packageWorkspaces.includes(workspace))
+			violations.push(`.stackwarden/ownership.yml workspace not found in package.json: ${workspace}`);
+	return violations;
+}
+
+function renderCodeowners(config) {
+	const lines = [
+		"# generated-from: .stackwarden/ownership.yml",
+		"# Do not edit manually. Run: bun run codeowners:generate",
+		"#",
+		"# CODEOWNERS is intentionally scoped to privileged CI/CD, secret, deploy, and",
+		"# infrastructure surfaces. Normal product/code/docs PRs should not require",
+		"# privileged approval solely because of a repository-wide wildcard.",
+		"#",
+		"# GitHub uses the last matching CODEOWNERS rule. Keep privileged rules explicit.",
+		"",
+	];
+	if (config.workspaceRegistry.requirePackageJsonCoverage) {
+		lines.push(
+			"# Workspace coverage is checked against package.json from .stackwarden/ownership.yml.",
+			"# Workspace rules are not emitted unless workspaceRegistry.emitCodeownersRules is true.",
+			"",
+		);
+	}
+	for (const section of config.sections) {
+		lines.push(`# ${section.title}`);
+		for (const rule of section.rules) lines.push(`${rule.path} ${rule.owners.join(" ")}`);
+		lines.push("");
+	}
+	if (config.workspaceRegistry.emitCodeownersRules) {
+		lines.push("# Package workspaces.");
+		for (const workspace of config.workspaceRegistry.workspaces)
+			lines.push(`${workspace.path}/ ${workspace.owners.join(" ")}`);
+		lines.push("");
+	}
+	return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function generateWorkspacesCommand(targetPath = ".", _options = {}) {
+	const root = resolve(targetPath);
+	const result = evaluateWorkspaces(root);
+	if (result.violations.length > 0) return result;
+	for (const [file, content] of result.outputs) {
+		mkdirSync(dirname(file), { recursive: true });
+		writeFileSync(file, content);
+	}
+	return { ...result, status: "generated", changed: result.stale.length > 0 };
+}
+
+function checkWorkspacesCommand(targetPath = ".", options = {}) {
+	const result = evaluateWorkspaces(resolve(targetPath));
+	const violations = [
+		...result.violations,
+		...result.stale.map((file) => `${file} is stale. Run stackwarden generate workspaces.`),
+	];
+	return {
+		...result,
+		blocking: Boolean(options.strict && violations.length > 0),
+		wouldBlockIfStrict: violations.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: violations.length > 0 ? "failed" : "passed",
+		violations,
+	};
+}
+
+function evaluateWorkspaces(root) {
+	const sourcePath = resolve(root, ".stackwarden/workspaces.yml");
+	const violations = [];
+	if (!existsSync(sourcePath)) violations.push("missing workspace source: .stackwarden/workspaces.yml");
+	const registry = existsSync(sourcePath)
+		? parseWorkspaceRegistry(readFileSync(sourcePath, "utf8"))
+		: { generatedTargets: { rootReadme: "README.md", workspaceReadme: "README.md" }, workspaces: [] };
+	violations.push(...validateWorkspaceRegistry(root, registry));
+	const outputs = generateWorkspaceReadmeOutputs(root, registry);
+	const stale = [];
+	for (const [file, expected] of outputs) {
+		if (!existsSync(file) || readFileSync(file, "utf8") !== expected)
+			stale.push(normalizePath(file.slice(root.length + 1)));
+	}
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "workspaces",
+		blocking: false,
+		status: violations.length > 0 ? "failed" : stale.length > 0 ? "stale" : "passed",
+		violations,
+		warnings: [],
+		source: ".stackwarden/workspaces.yml",
+		stale,
+		outputs,
+	};
+}
+
+/** @returns {any} */
+function parseWorkspaceRegistry(source) {
+	const registry = /** @type {any} */ ({
+		generatedTargets: { rootReadme: "README.md", workspaceReadme: "README.md" },
+		workspaces: [],
+	});
+	let section = "";
+	let current;
+	let inCommands = false;
+	for (const rawLine of source.replace(/\r/g, "").split("\n")) {
+		const lineWithoutComment = rawLine.replace(/\s+#.*$/, "");
+		if (!lineWithoutComment.trim()) continue;
+		const indent = lineWithoutComment.match(/^\s*/)?.[0].length ?? 0;
+		const line = lineWithoutComment.trim();
+		if (indent === 0) {
+			section = line.endsWith(":") ? line.slice(0, -1) : "";
+			current = undefined;
+			inCommands = false;
+			continue;
+		}
+		if (section === "generatedTargets") {
+			const match = line.match(/^(rootReadme|workspaceReadme):\s*(.*)$/);
+			if (match) registry.generatedTargets[match[1]] = cleanYamlScalar(match[2]);
+			continue;
+		}
+		if (section === "workspaces") {
+			if (indent === 2 && line.startsWith("- path:")) {
+				current = {
+					path: cleanYamlScalar(line.replace(/^- path:\s*/, "")),
+					package: "",
+					domain: "",
+					layer: "",
+					sensitivity: "",
+					description: "",
+					commands: {},
+				};
+				registry.workspaces.push(current);
+				inCommands = false;
+				continue;
+			}
+			if (!current) continue;
+			if (indent === 4 && line === "commands: {}") {
+				current.commands = {};
+				inCommands = false;
+				continue;
+			}
+			if (indent === 4 && line === "commands:") {
+				inCommands = true;
+				continue;
+			}
+			if (inCommands && indent === 6) {
+				const command = line.match(/^(\w[\w:-]*):\s*(.*)$/);
+				if (command) current.commands[command[1]] = cleanYamlScalar(command[2]);
+				continue;
+			}
+			const field = line.match(/^(package|domain|layer|sensitivity|description):\s*(.*)$/);
+			if (field) {
+				current[field[1]] = cleanYamlScalar(field[2]);
+				inCommands = false;
+			}
+		}
+	}
+	return registry;
+}
+
+function validateWorkspaceRegistry(root, registry) {
+	const packageWorkspaceSet = new Set(loadPackageWorkspaces(root, "package.json"));
+	const declared = new Set(registry.workspaces.map((workspace) => workspace.path));
+	const violations = [];
+	for (const workspace of packageWorkspaceSet)
+		if (!declared.has(workspace))
+			violations.push(`package.json workspace missing from .stackwarden/workspaces.yml: ${workspace}`);
+	for (const workspace of registry.workspaces) {
+		if (!packageWorkspaceSet.has(workspace.path))
+			violations.push(`.stackwarden/workspaces.yml workspace not found in package.json: ${workspace.path}`);
+		if (!existsSync(resolve(root, workspace.path))) violations.push(`workspace path does not exist: ${workspace.path}`);
+		if (existsSync(resolve(root, workspace.path, "package.json"))) {
+			const pkg = JSON.parse(readFileSync(resolve(root, workspace.path, "package.json"), "utf8"));
+			if (pkg.name && pkg.name !== workspace.package)
+				violations.push(
+					`${workspace.path} package name mismatch: package.json=${pkg.name}, registry=${workspace.package}`,
+				);
+		}
+	}
+	return violations;
+}
+
+function generateWorkspaceReadmeOutputs(root, registry) {
+	const outputs = new Map();
+	const rootReadme = resolve(root, registry.generatedTargets.rootReadme);
+	const rootCurrent = existsSync(rootReadme) ? readFileSync(rootReadme, "utf8") : "# Repository\n";
+	outputs.set(rootReadme, mergeGeneratedSection(rootCurrent, renderRootWorkspaceSection(registry), "Repository"));
+	for (const workspace of registry.workspaces) {
+		const readme = resolve(root, workspace.path, registry.generatedTargets.workspaceReadme);
+		const current = existsSync(readme) ? readFileSync(readme, "utf8") : `# ${workspace.package || workspace.path}\n`;
+		outputs.set(
+			readme,
+			mergeGeneratedSection(current, renderWorkspaceReadmeSection(workspace), workspace.package || workspace.path),
+		);
+	}
+	return outputs;
+}
+
+function renderRootWorkspaceSection(registry) {
+	const rows = registry.workspaces
+		.map(
+			(workspace) =>
+				`| \`${workspace.path}\` | \`${workspace.package}\` | ${workspace.domain} | ${workspace.layer} | ${workspace.sensitivity} |`,
+		)
+		.join("\n");
+	return [
+		"<!-- generated-from: .stackwarden/workspaces.yml -->",
+		"## Workspace registry",
+		"",
+		"This section is generated from `.stackwarden/workspaces.yml`. Do not edit it manually.",
+		"",
+		"| Workspace | Package | Domain | Layer | Sensitivity |",
+		"| --- | --- | --- | --- | --- |",
+		rows,
+		"<!-- /generated-from: .stackwarden/workspaces.yml -->",
+	].join("\n");
+}
+
+function renderWorkspaceReadmeSection(workspace) {
+	return [
+		"<!-- generated-from: .stackwarden/workspaces.yml -->",
+		"## Workspace governance",
+		"",
+		"This section is generated from the root `.stackwarden/workspaces.yml`. Do not edit it manually.",
+		"",
+		`- Path: \`${workspace.path}\``,
+		`- Package: \`${workspace.package}\``,
+		`- Domain: ${workspace.domain}`,
+		`- Hexagonal layer: ${workspace.layer}`,
+		`- Sensitivity: ${workspace.sensitivity}`,
+		`- Purpose: ${workspace.description}`,
+		"",
+		"### Root validation commands",
+		"",
+		commandList(workspace.commands),
+		"<!-- /generated-from: .stackwarden/workspaces.yml -->",
+	].join("\n");
+}
+
+function mergeGeneratedSection(current, generated, fallbackTitle) {
+	const start = "<!-- generated-from: .stackwarden/workspaces.yml -->";
+	const end = "<!-- /generated-from: .stackwarden/workspaces.yml -->";
+	if (current.includes(start) && current.includes(end)) {
+		const before = current.slice(0, current.indexOf(start)).trimEnd();
+		const after = current.slice(current.indexOf(end) + end.length).trimStart();
+		return `${before}\n\n${generated}\n${after ? `\n${after}` : ""}`;
+	}
+	const prefix = current.trim().length > 0 ? current.trimEnd() : `# ${fallbackTitle}`;
+	return `${prefix}\n\n${generated}\n`;
+}
+
+function commandList(commands) {
+	const entries = Object.entries(commands ?? {});
+	if (entries.length === 0) return "- No root command registered yet.";
+	return entries.map(([name, command]) => `- ${name}: \`${command}\``).join("\n");
+}
+
+function loadStackwardenPipelineConfig(root) {
+	const sourcePath = resolve(root, ".stackwarden/pipeline.yml");
+	if (!existsSync(sourcePath)) throw new Error("missing pipeline source: .stackwarden/pipeline.yml");
+	return parsePipelineYaml(readFileSync(sourcePath, "utf8"));
+}
+
+function emptyDomainConfig() {
+	return { roots: [], files: [], extensions: [], tests: [], builds: [], checks: [] };
+}
+
+/** @returns {any} */
+function parsePipelineYaml(source) {
+	const config = /** @type {any} */ ({
+		defaults: {
+			baseRef: "origin/main",
+			failClosedOnUnknownPath: true,
+			alwaysChecks: [],
+			fullChecks: ["bun run lint:ci"],
+			fullTests: ["bun run test:all"],
+			fullBuilds: ["bun run build"],
+		},
+		domains: {},
+		fullValidation: { paths: [], domains: [] },
+		unknownPath: { domains: [] },
+	});
+	let section = "";
+	let domainName = "";
+	let listKey = "";
+	let inFullValidation = false;
+	let inUnknownPath = false;
+	for (const rawLine of source.replace(/\r/g, "").split("\n")) {
+		const withoutComment = rawLine.replace(/\s+#.*$/, "");
+		if (!withoutComment.trim()) continue;
+		const indent = withoutComment.match(/^\s*/)?.[0].length ?? 0;
+		const line = withoutComment.trim();
+		if (indent === 0) {
+			section = line.endsWith(":") ? line.slice(0, -1) : "";
+			domainName = "";
+			listKey = "";
+			inFullValidation = false;
+			inUnknownPath = false;
+			continue;
+		}
+		if (section === "defaults") {
+			const match = line.match(/^(\w+):\s*(.*)$/);
+			if (match) {
+				const [, key, value] = match;
+				if (value === "") listKey = key;
+				else config.defaults[key] = parseYamlScalar(value);
+				continue;
+			}
+			if (line.startsWith("- ") && listKey) config.defaults[listKey].push(cleanYamlScalar(line.slice(2)));
+			continue;
+		}
+		if (section === "domains") {
+			if (indent === 2 && line.endsWith(":")) {
+				domainName = line.slice(0, -1);
+				config.domains[domainName] = emptyDomainConfig();
+				listKey = "";
+				continue;
+			}
+			const domain = config.domains[domainName];
+			if (!domain) continue;
+			const keyMatch = line.match(/^(roots|files|extensions|tests|checks|builds):\s*(.*)$/);
+			if (keyMatch) {
+				const [, key, value] = keyMatch;
+				listKey = key;
+				if (value === "[]") domain[key] = [];
+				continue;
+			}
+			if (line.startsWith("- ") && listKey) domain[listKey].push(cleanYamlScalar(line.slice(2)));
+			continue;
+		}
+		if (section === "rules") {
+			if (indent === 2 && line === "fullValidation:") {
+				inFullValidation = true;
+				inUnknownPath = false;
+				listKey = "";
+				continue;
+			}
+			if (indent === 2 && line === "unknownPath:") {
+				inFullValidation = false;
+				inUnknownPath = true;
+				listKey = "";
+				continue;
+			}
+			const keyMatch = line.match(/^(paths|domains):\s*(.*)$/);
+			if (keyMatch) {
+				listKey = keyMatch[1];
+				continue;
+			}
+			if (line.startsWith("- ")) {
+				const value = cleanYamlScalar(line.slice(2));
+				if (inFullValidation && listKey === "paths") config.fullValidation.paths.push(value);
+				if (inFullValidation && listKey === "domains") config.fullValidation.domains.push(value);
+				if (inUnknownPath && listKey === "domains") config.unknownPath.domains.push(value);
+			}
+		}
+	}
+	return config;
+}
+
+function classifyAffectedPath(file, config) {
+	const normalized = normalizePath(file);
+	if (config.fullValidation.paths.includes(normalized))
+		return { domains: config.fullValidation.domains, fullRequired: true, reason: `root config changed: ${normalized}` };
+	for (const [domain, domainConfig] of Object.entries(config.domains)) {
+		if (domainConfig.files.includes(normalized)) return { domains: [domain] };
+		if (domainConfig.roots.some((root) => normalized.startsWith(root))) return { domains: [domain] };
+		if (domainConfig.extensions.some((extension) => normalized.endsWith(extension))) return { domains: [domain] };
+	}
+	return {
+		domains: config.unknownPath.domains,
+		fullRequired: config.defaults.failClosedOnUnknownPath,
+		reason: `unclassified path: ${normalized}`,
+	};
+}
+
+function planAffectedFiles(files, config) {
+	const domains = new Set();
+	const reasons = [];
+	let fullRequired = false;
+	for (const file of files.filter(Boolean)) {
+		const classification = classifyAffectedPath(file, config);
+		for (const domain of classification.domains) domains.add(domain);
+		if (classification.fullRequired) fullRequired = true;
+		if (classification.reason) reasons.push(classification.reason);
+	}
+	const ordered = Object.keys(config.domains).filter((domain) => domains.has(domain));
+	const commands = ordered.map((domain) => config.domains[domain]);
+	return {
+		files,
+		domains: ordered,
+		fullRequired,
+		reasons,
+		tests: uniq(commands.flatMap((command) => command.tests)),
+		builds: uniq(commands.flatMap((command) => command.builds)),
+		checks: uniq([...(config.defaults.alwaysChecks ?? []), ...commands.flatMap((command) => command.checks)]),
+	};
+}
+
+function changedFiles(root, baseRef) {
+	const mergeBase = spawnSync("git", ["merge-base", baseRef, "HEAD"], { cwd: root, encoding: "utf8" });
+	if (mergeBase.status !== 0)
+		throw new Error(`Unable to compute merge-base with ${baseRef}: ${mergeBase.stderr.trim()}`);
+	const base = mergeBase.stdout.trim();
+	const diff = spawnSync("git", ["diff", "--name-only", "--diff-filter=d", base], { cwd: root, encoding: "utf8" });
+	if (diff.status !== 0) throw new Error(`Unable to compute changed files: ${diff.stderr.trim()}`);
+	return diff.stdout
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+}
+
+function loadPackageWorkspaces(root, sourcePath) {
+	const packagePath = resolve(root, sourcePath);
+	if (!existsSync(packagePath)) return [];
+	const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
+	const workspaces = packageJson.workspaces;
+	if (Array.isArray(workspaces)) return expandWorkspacePatterns(root, workspaces);
+	if (Array.isArray(workspaces?.packages)) return expandWorkspacePatterns(root, workspaces.packages);
+	return [];
+}
+
+function expandWorkspacePatterns(root, patterns) {
+	const paths = [];
+	for (const pattern of patterns) {
+		if (!pattern.includes("*")) {
+			paths.push(normalizePath(pattern));
+			continue;
+		}
+		const base = pattern.slice(0, pattern.indexOf("*")).replace(/\/$/, "");
+		const basePath = resolve(root, base);
+		if (!existsSync(basePath)) continue;
+		for (const entry of readdirSync(basePath, { withFileTypes: true })) {
+			if (!entry.isDirectory()) continue;
+			const workspacePath = normalizePath(`${base}/${entry.name}`);
+			if (matchesWorkspacePattern(workspacePath, pattern) && existsSync(resolve(root, workspacePath, "package.json")))
+				paths.push(workspacePath);
+		}
+	}
+	return uniq(paths).sort();
+}
+
+function matchesWorkspacePattern(workspacePath, pattern) {
+	const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]+");
+	return new RegExp(`^${escaped}$`).test(workspacePath);
+}
+
+function parseInlineYamlArray(value) {
+	const trimmed = value.trim();
+	if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return [];
+	return trimmed
+		.slice(1, -1)
+		.split(",")
+		.map((item) => cleanYamlScalar(item))
+		.filter(Boolean);
+}
+
+function parseYamlScalar(value) {
+	const trimmed = value.trim();
+	if (trimmed === "true") return true;
+	if (trimmed === "false") return false;
+	if (/^\d+$/.test(trimmed)) return Number(trimmed);
+	if (trimmed === "[]") return [];
+	return cleanYamlScalar(trimmed);
+}
+
+function cleanYamlScalar(value) {
+	return String(value)
+		.trim()
+		.replace(/^["']|["']$/g, "");
+}
+
+function uniq(items) {
+	return [...new Set(items)];
+}
+
+function printGenerateResult(result) {
+	if (result.status === "generated") {
+		console.log(color.green(`Generated ${result.check}.`));
+		return;
+	}
+	printCheckResult(result);
+}
+
+function printAffectedResult(result) {
+	if (result.status !== "passed") {
+		printCheckResult(result);
+		return;
+	}
+	console.log(`Affected domains: ${result.plan.domains.join(", ") || "none"}`);
+	if (result.plan.fullRequired) console.log(`Expanded validation reason: ${result.plan.reasons.join("; ")}`);
+	if (result.executed.length === 0) console.log(`No affected ${result.mode} commands to run.`);
+	for (const command of result.executed) console.log(`${result.dryRun ? "DRY " : ""}$ ${command}`);
 }
 
 function printInitResult(result) {

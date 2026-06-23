@@ -37,6 +37,9 @@ npx stackwarden generate agents
 npx stackwarden check agents
 npx stackwarden check projections
 npx stackwarden check governance
+npx stackwarden check local-bypass
+npx stackwarden governance status
+npx stackwarden governance diff
 ```
 
 ## Executable checks
@@ -51,7 +54,10 @@ StackWarden includes side-effect-free local checks. They observe, evaluate, and 
 - `stackwarden check pipeline` / `stackwarden affected verify` — validates `.stackwarden/pipeline.yml` and runs or previews affected checks/tests/builds.
 - `stackwarden generate agents` / `stackwarden check agents` — keeps agent instructions generated from `.stackwarden/agent-rules.yml` and `.stackwarden/agents.yml`.
 - `stackwarden check projections` — validates `.stackwarden/projections.yml` source/target/generator/checker edges.
-- `stackwarden check governance` — aggregate governance freshness check for projections, agents, ownership, workspaces, and pipeline.
+- `stackwarden check governance` — aggregate governance freshness check for projections, agents, ownership, workspaces, pipeline, and local bypasses.
+- `stackwarden check local-bypass` — detects copied repo-local governance scripts that should be replaced by StackWarden commands.
+- `stackwarden governance status` — StackWarden-inspired status view for all governance drift checks.
+- `stackwarden governance diff` — StackWarden-inspired preview of generated projection differences without writing files.
 
 ## Commit-time feedback loop
 

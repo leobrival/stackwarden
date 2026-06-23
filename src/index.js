@@ -143,6 +143,13 @@ function main(argv = process.argv.slice(2)) {
 		process.exitCode = result.blocking ? 1 : 0;
 		return;
 	}
+	if (command === "governance") {
+		const result = runGovernance(checkName ?? "status", checkName ? path : ".", options);
+		if (options.json) console.log(JSON.stringify(result, null, 2));
+		else printGovernanceResult(result);
+		process.exitCode = result.blocking ? 1 : 0;
+		return;
+	}
 	if (command === "check") {
 		const result = runCheck(checkName ?? path, checkName ? path : ".", options);
 		if (options.json) console.log(JSON.stringify(result, null, 2));
@@ -186,7 +193,7 @@ function parseArgs(argv) {
 		else if (arg === "--help" || arg === "-h") options.help = true;
 		else if (arg === "--version" || arg === "-v") options.version = true;
 		else if (!command) command = arg;
-		else if (["check", "generate", "affected"].includes(command) && !checkName) checkName = arg;
+		else if (["check", "generate", "affected", "governance"].includes(command) && !checkName) checkName = arg;
 		else path = arg;
 	}
 	return { command: command ?? "help", path, checkName, options };
@@ -195,14 +202,17 @@ function parseArgs(argv) {
 function printHelp() {
 	console.log(
 		`StackWarden ${VERSION}\n\nUsage:\n  stackwarden audit [path] [--fast|--deep] [--json] [--ci]\n  stackwarden init [path] [--write] [--json]\n  stackwarden plan [path] [--json]\n  stackwarden hook pre-commit [--json] [--ci]
-  stackwarden check <commit-size|env-drift|docs-drift|codeowners|workspaces|pipeline|agents|projections|governance> [--json] [--strict]
+  stackwarden check <commit-size|env-drift|docs-drift|codeowners|workspaces|pipeline|agents|projections|governance|local-bypass> [--json] [--strict]
   stackwarden generate <codeowners|workspaces|agents> [path] [--json]
+  stackwarden governance <status|diff> [path] [--json] [--strict]
   stackwarden affected <checks|tests|builds|verify> [path] [--base origin/main] [--dry-run] [--json]
 
 Examples:
   stackwarden audit --fast\n  stackwarden audit . --deep --json\n  stackwarden init /tmp/repo --write\n  stackwarden plan .\n  stackwarden hook pre-commit\n  stackwarden check env-drift --json
   stackwarden check codeowners /tmp/repo --json
   stackwarden generate workspaces
+  stackwarden governance status --json
+  stackwarden governance diff
   stackwarden affected verify --base origin/main --dry-run`,
 	);
 }
@@ -1550,6 +1560,7 @@ export function runCheck(name, targetPath = ".", options = {}) {
 	if (name === "agents") return checkAgentsCommand(targetPath, checkOptions);
 	if (name === "projections") return checkProjectionsCommand(targetPath, checkOptions);
 	if (name === "governance") return checkGovernanceCommand(targetPath, checkOptions);
+	if (name === "local-bypass") return checkLocalBypassCommand(targetPath, checkOptions);
 	return {
 		schemaVersion: 1,
 		tool: { name: "stackwarden", version: VERSION },
@@ -1594,6 +1605,7 @@ function checkConfigKey(name) {
 			agents: "agents",
 			projections: "projections",
 			governance: "governance",
+			"local-bypass": "localBypass",
 		}[name] ?? name
 	);
 }
@@ -2267,8 +2279,130 @@ function parseProjectionRegistry(source) {
 	return projections;
 }
 
+export function runGovernance(mode = "status", targetPath = ".", options = {}) {
+	if (mode === "status") return governanceStatusCommand(targetPath, options);
+	if (mode === "diff") return governanceDiffCommand(targetPath, options);
+	return unknownCommandResult("governance", mode, options);
+}
+
+function governanceStatusCommand(targetPath = ".", options = {}) {
+	const checks = ["projections", "agents", "codeowners", "workspaces", "pipeline", "local-bypass"].map((name) =>
+		runCheck(name, targetPath, options),
+	);
+	const violations = checks.flatMap((check) => check.violations ?? []);
+	const warnings = checks.flatMap((check) => check.warnings ?? []);
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		command: "governance",
+		mode: "status",
+		blocking: Boolean(options.strict && violations.length > 0),
+		status: violations.length > 0 ? "failed" : warnings.length > 0 ? "warning" : "passed",
+		violations,
+		warnings,
+		checks: checks.map((check) => ({
+			check: check.check,
+			status: check.status,
+			violations: check.violations?.length ?? 0,
+			warnings: check.warnings?.length ?? 0,
+		})),
+	};
+}
+
+function governanceDiffCommand(targetPath = ".", options = {}) {
+	const root = resolve(targetPath);
+	const diffs = [];
+	const codeowners = evaluateCodeowners(root);
+	if (
+		!codeowners.violations.some((violation) => violation.startsWith("missing ownership source")) &&
+		codeowners.current !== codeowners.expected
+	) {
+		diffs.push(buildTextDiff(codeowners.target, codeowners.current, codeowners.expected));
+	}
+	for (const result of [evaluateWorkspaces(root), evaluateAgents(root)]) {
+		if ((result.violations ?? []).length > 0) continue;
+		for (const [file, expected] of result.outputs ?? []) {
+			const current = existsSync(file) ? readFileSync(file, "utf8") : "";
+			if (current !== expected)
+				diffs.push(buildTextDiff(normalizePath(file.slice(root.length + 1)), current, expected));
+		}
+	}
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		command: "governance",
+		mode: "diff",
+		blocking: Boolean(options.strict && diffs.length > 0),
+		status: diffs.length > 0 ? "diff" : "passed",
+		violations: options.strict && diffs.length > 0 ? ["governance projections are stale"] : [],
+		warnings: diffs.length > 0 ? ["governance projections differ from generated output"] : [],
+		diffs,
+	};
+}
+
+function buildTextDiff(file, current, expected) {
+	return {
+		file,
+		currentHash: stableHash(current),
+		expectedHash: stableHash(expected),
+		currentPreview: current.split("\n").slice(0, 12),
+		expectedPreview: expected.split("\n").slice(0, 12),
+	};
+}
+
+function stableHash(value) {
+	let hash = 5381;
+	for (const char of value) hash = (hash * 33) ^ char.charCodeAt(0);
+	return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function printGovernanceResult(result) {
+	console.log(color.bold(`StackWarden governance ${result.mode}: ${result.status}`));
+	for (const check of result.checks ?? [])
+		console.log(`- ${check.check}: ${check.status} (${check.violations} violation(s))`);
+	for (const diff of result.diffs ?? []) console.log(`- ${diff.file}: ${diff.currentHash} -> ${diff.expectedHash}`);
+	for (const violation of result.violations ?? []) console.error(`- ${violation}`);
+	for (const warning of result.warnings ?? []) console.warn(`- ${warning}`);
+}
+
+function checkLocalBypassCommand(targetPath = ".", options = {}) {
+	const root = resolve(targetPath);
+	const files = listFiles(root, 3000).map(normalizePath);
+	const suspiciousFiles = files.filter((file) =>
+		/(^|\/)scripts\/(generate-codeowners|generate-workspace-readmes|affected-domains|run-affected|change-classifier)\.(t|j)s$/.test(
+			file,
+		),
+	);
+	const packageJson = readJsonIfExists(join(root, "package.json")) ?? {};
+	const scripts = packageJson.scripts ?? {};
+	const suspiciousScripts = Object.entries(scripts)
+		.filter(([, command]) =>
+			/scripts\/(generate-codeowners|generate-workspace-readmes|affected-domains|run-affected|change-classifier)\.(t|j)s/.test(
+				String(command),
+			),
+		)
+		.map(([name, command]) => `${name}: ${command}`);
+	const violations = [
+		...suspiciousFiles.map((file) => `local governance bypass script exists: ${file}`),
+		...suspiciousScripts.map((script) => `package script bypasses StackWarden: ${script}`),
+	];
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "local-bypass",
+		blocking: Boolean(options.strict && violations.length > 0),
+		wouldBlockIfStrict: violations.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: violations.length > 0 ? "failed" : "passed",
+		violations,
+		warnings: [],
+		suspiciousFiles,
+		suspiciousScripts,
+	};
+}
+
 function checkGovernanceCommand(targetPath = ".", options = {}) {
-	const checks = ["projections", "agents", "codeowners", "workspaces", "pipeline"].map((name) =>
+	const checks = ["projections", "agents", "codeowners", "workspaces", "pipeline", "local-bypass"].map((name) =>
 		runCheck(name, targetPath, options),
 	);
 	const violations = checks.flatMap((check) => check.violations ?? []);

@@ -4,7 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { checkConfigSchemas } from "../scripts/check-config-schemas.mjs";
-import { auditRepository, initRepository, planRepository, runCheck, runGenerate, runPreCommitHook } from "./index.js";
+import {
+	auditRepository,
+	initRepository,
+	planRepository,
+	runCheck,
+	runGenerate,
+	runGovernance,
+	runPreCommitHook,
+} from "./index.js";
 
 function createRepo(prefix) {
 	const root = mkdtempSync(join(tmpdir(), prefix));
@@ -822,6 +830,52 @@ projections:
 		assert.equal(drift.status, "failed");
 		assert.equal(drift.blocking, true);
 		assert.ok(drift.violations.some((violation) => violation.includes("missing checker")));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Business scenario: governance status aggregates StackWarden-inspired anti-drift checks", () => {
+	const root = createRepo("stackwarden-business-governance-status-");
+	try {
+		mkdirSync(join(root, ".stackwarden"));
+		writeFileSync(
+			join(root, "package.json"),
+			JSON.stringify({ scripts: { "codeowners:generate": "bun scripts/generate-codeowners.ts" } }),
+		);
+		mkdirSync(join(root, "scripts"));
+		writeFileSync(join(root, "scripts/generate-codeowners.ts"), "console.log('legacy')\n");
+
+		const bypass = runCheck("local-bypass", root, { json: true, strict: true });
+		assert.equal(bypass.status, "failed");
+		assert.equal(bypass.blocking, true);
+		assert.ok(bypass.violations.some((violation) => violation.includes("generate-codeowners.ts")));
+
+		const governance = runCheck("governance", root, { json: true });
+		assert.equal(governance.status, "failed");
+		assert.ok(governance.checks.some((check) => check.check === "local-bypass"));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Business scenario: governance diff reports stale generated agent files without writing", () => {
+	const root = createRepo("stackwarden-business-governance-diff-");
+	try {
+		mkdirSync(join(root, ".stackwarden"));
+		writeFileSync(join(root, ".stackwarden/agent-rules.yml"), "version: 1\ninstructions:\n  - Keep tests aligned.\n");
+		writeFileSync(
+			join(root, ".stackwarden/agents.yml"),
+			"version: 1\nagents:\n  - id: agents-md\n    target: AGENTS.md\n",
+		);
+		runGenerate("agents", root, { json: true });
+		writeFileSync(join(root, "AGENTS.md"), "manual drift\n");
+
+		const diff = runGovernance("diff", root, { json: true });
+		assert.equal(diff.status, "diff");
+		assert.equal(diff.diffs[0].file, "AGENTS.md");
+		assert.notEqual(diff.diffs[0].currentHash, diff.diffs[0].expectedHash);
+		assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), "manual drift\n");
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

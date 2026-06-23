@@ -53,6 +53,30 @@
 				}
 			}
 		},
-		"jsonContract": { "type": "object" }
+		"jsonContract": { "type": "object" },
+		"onlineVersion": {
+			"type": "object",
+			"required": [
+				"name",
+				"status",
+				"purpose",
+				"publicWebsite",
+				"cloudApi",
+				"freeCapabilities",
+				"paidCapabilities",
+				"publicLaunchChecklist"
+			],
+			"additionalProperties": false,
+			"properties": {
+				"name": { "type": "string" },
+				"status": { "type": "string" },
+				"purpose": { "type": "string" },
+				"publicWebsite": { "type": "object" },
+				"cloudApi": { "type": "object" },
+				"freeCapabilities": { "type": "array", "items": { "type": "string" } },
+				"paidCapabilities": { "type": "array", "items": { "type": "string" } },
+				"publicLaunchChecklist": { "type": "array", "items": { "type": "string" } }
+			}
+		}
 	}
 }

@@ -36,6 +36,50 @@ ${JSON.stringify(jsonContract, null, 2)}
 \`\`\``;
 }
 
+function renderOnlineVersion(onlineVersion) {
+	if (!onlineVersion) return "";
+	return `## Public online version
+
+**${onlineVersion.name}** status: \`${onlineVersion.status}\`.
+
+${onlineVersion.purpose}
+
+### Public website must explain
+
+${renderList(onlineVersion.publicWebsite.mustExplain)}
+
+### Public website must not expose
+
+${renderList(onlineVersion.publicWebsite.mustNotExpose)}
+
+### Initial cloud API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+${onlineVersion.cloudApi.initialEndpoints.map((endpoint) => `| ${endpoint.method} | \`${endpoint.path}\` | ${endpoint.purpose} |`).join("\n")}
+
+Default privacy contract:
+
+\`\`\`json
+${JSON.stringify(onlineVersion.cloudApi.defaultPrivacy, null, 2)}
+\`\`\`
+
+Failure mode: \`${onlineVersion.cloudApi.failureMode}\`.
+
+### Free capabilities
+
+${renderList(onlineVersion.freeCapabilities)}
+
+### Paid capabilities
+
+${renderList(onlineVersion.paidCapabilities)}
+
+### Public launch checklist
+
+${renderList(onlineVersion.publicLaunchChecklist)}
+`;
+}
+
 export function generateOpenCoreDoc(config) {
 	return `<!-- generated-from: packages/stackwarden/config/open-core-model.json -->
 <!-- Do not edit manually. Run: bun run --filter stackwarden docs:open-core:generate -->
@@ -64,6 +108,7 @@ ${renderList(config.localGuarantees)}
 
 ${renderConfigFiles(config.configFiles)}
 
+${renderOnlineVersion(config.onlineVersion)}
 ## JSON visibility contract
 
 ${renderJsonContract(config.jsonContract)}

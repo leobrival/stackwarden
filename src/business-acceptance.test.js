@@ -706,6 +706,7 @@ test("Business scenario: capabilities and repo config init is dry-run first and 
 		assert.deepEqual(dryRun.changes, [
 			{ path: ".stackwarden/capabilities.yml", action: "would-create" },
 			{ path: ".stackwarden/config.yml", action: "would-create" },
+			{ path: ".stackwarden/documentation.yml", action: "would-create" },
 			{ path: ".stackwarden/lefthook.yml", action: "would-create" },
 			{ path: ".stackwarden/hooks/pre-commit", action: "would-create" },
 		]);
@@ -716,11 +717,13 @@ test("Business scenario: capabilities and repo config init is dry-run first and 
 		assert.deepEqual(writeRun.changes, [
 			{ path: ".stackwarden/capabilities.yml", action: "created" },
 			{ path: ".stackwarden/config.yml", action: "created" },
+			{ path: ".stackwarden/documentation.yml", action: "created" },
 			{ path: ".stackwarden/lefthook.yml", action: "created" },
 			{ path: ".stackwarden/hooks/pre-commit", action: "created" },
 		]);
 		assert.equal(existsSync(join(root, ".stackwarden/capabilities.yml")), true);
 		assert.equal(existsSync(join(root, ".stackwarden/config.yml")), true);
+		assert.equal(existsSync(join(root, ".stackwarden/documentation.yml")), true);
 		assert.equal(existsSync(join(root, ".stackwarden/lefthook.yml")), true);
 		assert.equal(existsSync(join(root, ".stackwarden/hooks/pre-commit")), true);
 
@@ -730,6 +733,7 @@ test("Business scenario: capabilities and repo config init is dry-run first and 
 		assert.deepEqual(secondWriteRun.changes, [
 			{ path: ".stackwarden/capabilities.yml", action: "skip-existing" },
 			{ path: ".stackwarden/config.yml", action: "skip-existing" },
+			{ path: ".stackwarden/documentation.yml", action: "skip-existing" },
 			{ path: ".stackwarden/lefthook.yml", action: "skip-existing" },
 			{ path: ".stackwarden/hooks/pre-commit", action: "skip-existing" },
 		]);
@@ -876,6 +880,90 @@ test("Business scenario: governance diff reports stale generated agent files wit
 		assert.equal(diff.diffs[0].file, "AGENTS.md");
 		assert.notEqual(diff.diffs[0].currentHash, diff.diffs[0].expectedHash);
 		assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), "manual drift\n");
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Business scenario: README tree sections are generated from configurable markers", () => {
+	const root = createRepo("stackwarden-business-doc-tree-");
+	try {
+		mkdirSync(join(root, "src"));
+		writeFileSync(join(root, "src/index.ts"), "export {}\n");
+		writeFileSync(
+			join(root, "README.md"),
+			`# Repo
+
+<!-- repo-tree:start path="." depth="1" files="true" -->
+old
+<!-- repo-tree:end -->
+`,
+		);
+		const stale = runCheck("docs", root, { json: true });
+		assert.equal(stale.status, "failed");
+		assert.ok(stale.violations.some((violation) => violation.includes("README.md is stale")));
+
+		const generated = runGenerate("docs", root, { json: true });
+		assert.equal(generated.status, "generated");
+		const readme = readFileSync(join(root, "README.md"), "utf8");
+		assert.match(readme, /```txt\n\.\n/);
+		assert.match(readme, /src\//);
+		assert.equal(runCheck("docs", root, { json: true }).status, "passed");
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Business scenario: documentation governance separates generated and handwritten Markdown", () => {
+	const root = createRepo("stackwarden-business-doc-governance-");
+	try {
+		mkdirSync(join(root, ".stackwarden"));
+		mkdirSync(join(root, "docs/generated"), { recursive: true });
+		writeFileSync(
+			join(root, ".stackwarden/documentation.yml"),
+			`version: 1
+ignoredPaths:
+  - node_modules/**
+allowedExtensions:
+  - .md
+requiredGeneratedMarkers:
+  - generated-from:
+generatedMarkdown:
+  paths:
+    - docs/generated/**
+allowedHandwrittenGlobs:
+  - README.md
+legacyHandwrittenPaths:
+  - docs/legacy.md
+`,
+		);
+		writeFileSync(join(root, "README.md"), "# ok\n");
+		writeFileSync(join(root, "docs/generated/api.md"), "# missing marker\n");
+		writeFileSync(join(root, "docs/random.md"), "# untracked\n");
+
+		const result = runCheck("docs-governance", root, { json: true, strict: true });
+		assert.equal(result.status, "failed");
+		assert.equal(result.blocking, true);
+		assert.ok(result.violations.some((violation) => violation.includes("generated Markdown missing marker")));
+		assert.ok(result.violations.some((violation) => violation.includes("untracked handwritten Markdown")));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Business scenario: handwritten documentation check is advisory by default", () => {
+	const root = createRepo("stackwarden-business-handwritten-docs-");
+	try {
+		mkdirSync(join(root, ".stackwarden"));
+		writeFileSync(
+			join(root, ".stackwarden/documentation.yml"),
+			"version: 1\nallowedExtensions:\n  - .md\nallowedHandwrittenGlobs:\n  - README.md\n",
+		);
+		writeFileSync(join(root, "notes.md"), "# local note\n");
+		const result = runCheck("handwritten-docs", root, { json: true, files: ["notes.md"] });
+		assert.equal(result.status, "warning");
+		assert.equal(result.blocking, false);
+		assert.ok(result.warnings.some((warning) => warning.includes("notes.md")));
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

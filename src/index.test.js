@@ -34,17 +34,17 @@ test("initRepository is dry-run by default and writes only with write=true", () 
 		const dryRun = stackwarden.initRepository(root, { write: false, json: true });
 		assert.deepEqual(
 			dryRun.changes.map((change) => change.action),
-			["would-create", "would-create", "would-create", "would-create"],
+			["would-create", "would-create", "would-create", "would-create", "would-create"],
 		);
 		const written = stackwarden.initRepository(root, { write: true, json: true });
 		assert.deepEqual(
 			written.changes.map((change) => change.action),
-			["created", "created", "created", "created"],
+			["created", "created", "created", "created", "created"],
 		);
 		const secondRun = stackwarden.initRepository(root, { write: true, json: true });
 		assert.deepEqual(
 			secondRun.changes.map((change) => change.action),
-			["skip-existing", "skip-existing", "skip-existing", "skip-existing"],
+			["skip-existing", "skip-existing", "skip-existing", "skip-existing", "skip-existing"],
 		);
 	} finally {
 		rmSync(root, { recursive: true, force: true });

@@ -202,8 +202,8 @@ function parseArgs(argv) {
 function printHelp() {
 	console.log(
 		`StackWarden ${VERSION}\n\nUsage:\n  stackwarden audit [path] [--fast|--deep] [--json] [--ci]\n  stackwarden init [path] [--write] [--json]\n  stackwarden plan [path] [--json]\n  stackwarden hook pre-commit [--json] [--ci]
-  stackwarden check <commit-size|env-drift|docs-drift|codeowners|workspaces|pipeline|agents|projections|governance|local-bypass> [--json] [--strict]
-  stackwarden generate <codeowners|workspaces|agents> [path] [--json]
+  stackwarden check <commit-size|env-drift|docs-drift|docs|docs-governance|handwritten-docs|codeowners|workspaces|pipeline|agents|projections|governance|local-bypass> [--json] [--strict]
+  stackwarden generate <codeowners|workspaces|agents|docs> [path] [--json]
   stackwarden governance <status|diff> [path] [--json] [--strict]
   stackwarden affected <checks|tests|builds|verify> [path] [--base origin/main] [--dry-run] [--json]
 
@@ -1561,6 +1561,9 @@ export function runCheck(name, targetPath = ".", options = {}) {
 	if (name === "projections") return checkProjectionsCommand(targetPath, checkOptions);
 	if (name === "governance") return checkGovernanceCommand(targetPath, checkOptions);
 	if (name === "local-bypass") return checkLocalBypassCommand(targetPath, checkOptions);
+	if (name === "docs") return checkDocsCommand(targetPath, checkOptions);
+	if (name === "docs-governance") return checkDocsGovernanceCommand(targetPath, checkOptions);
+	if (name === "handwritten-docs") return checkHandwrittenDocsCommand(targetPath, checkOptions);
 	return {
 		schemaVersion: 1,
 		tool: { name: "stackwarden", version: VERSION },
@@ -1606,6 +1609,9 @@ function checkConfigKey(name) {
 			projections: "projections",
 			governance: "governance",
 			"local-bypass": "localBypass",
+			docs: "docs",
+			"docs-governance": "docsGovernance",
+			"handwritten-docs": "handwrittenDocs",
 		}[name] ?? name
 	);
 }
@@ -1753,8 +1759,10 @@ function printCheckResult(result) {
 export function runPreCommitHook(targetPath = ".", options = { json: false, ci: false, strict: false }) {
 	const report = auditRepository(targetPath, { mode: "fast", json: Boolean(options.json), verbose: false });
 	const commitSizeCheck = runCheck("commit-size", targetPath, options);
+	const docsCheck = runCheck("docs", targetPath, options);
+	const handwrittenDocsCheck = runCheck("handwritten-docs", targetPath, options);
 	const commitSize = /** @type {any} */ (commitSizeCheck).commitSize;
-	const blocking = Boolean(commitSizeCheck.blocking);
+	const blocking = Boolean(commitSizeCheck.blocking || docsCheck.blocking || handwrittenDocsCheck.blocking);
 	return {
 		schemaVersion: 1,
 		tool: report.tool,
@@ -1766,6 +1774,11 @@ export function runPreCommitHook(targetPath = ".", options = { json: false, ci: 
 			recommendations: report.recommendations,
 		},
 		commitSize,
+		documentation: {
+			docs: docsCheck.status,
+			handwrittenDocs: handwrittenDocsCheck.status,
+			warnings: handwrittenDocsCheck.warnings ?? [],
+		},
 	};
 }
 
@@ -1881,6 +1894,10 @@ export function initRepository(targetPath = ".", options = { write: false, json:
 			content: defaultConfig(),
 		},
 		{
+			path: ".stackwarden/documentation.yml",
+			content: defaultDocumentation(),
+		},
+		{
 			path: ".stackwarden/lefthook.yml",
 			content: defaultLefthook(),
 		},
@@ -1937,6 +1954,15 @@ capabilities:
     docsDrift:
       enabled: true
       command: stackwarden check docs-drift
+    docs:
+      enabled: true
+      command: stackwarden check docs
+    docsGovernance:
+      enabled: true
+      command: stackwarden check docs-governance
+    handwrittenDocs:
+      enabled: true
+      command: stackwarden check handwritten-docs
     commitSize:
       enabled: true
       command: stackwarden check commit-size
@@ -2034,8 +2060,43 @@ continuousImprovement:
   documentationDrift:
     blocking: false
     recommended: true
+  documentationGovernance:
+    blocking: false
+    recommended: true
   affectedChecks:
     recommendedForWorkspaces: true
+`;
+}
+
+function defaultDocumentation() {
+	return `version: 1
+
+# StackWarden documentation governance is advisory by default.
+# Generated Markdown must include a provenance marker; handwritten Markdown
+# should either be allowlisted here or migrated into .stackwarden/*.yml sources.
+ignoredPaths:
+  - node_modules/**
+  - .git/**
+  - dist/**
+  - coverage/**
+allowedExtensions:
+  - .md
+  - .mdx
+requiredGeneratedMarkers:
+  - generated-from:
+  - repo-tree:start
+generatedMarkdown:
+  paths:
+    - docs/generated/**
+allowedHandwrittenGlobs:
+  - README.md
+  - docs/**
+  - CONTRIBUTING.md
+  - SECURITY.md
+  - CODE_OF_CONDUCT.md
+  - AGENTS.md
+  - CLAUDE.md
+legacyHandwrittenPaths: []
 `;
 }
 
@@ -2064,6 +2125,7 @@ export function runGenerate(name, targetPath = ".", options = { json: false }) {
 	if (name === "codeowners") return generateCodeownersCommand(targetPath, options);
 	if (name === "workspaces") return generateWorkspacesCommand(targetPath, options);
 	if (name === "agents") return generateAgentsCommand(targetPath, options);
+	if (name === "docs") return generateDocsCommand(targetPath, options);
 	return unknownCommandResult("generate", name, options);
 }
 
@@ -2279,6 +2341,323 @@ function parseProjectionRegistry(source) {
 	return projections;
 }
 
+export function generateDocsCommand(targetPath = ".", _options = {}) {
+	const root = resolve(targetPath);
+	const result = evaluateDocs(root);
+	if (result.violations.length > 0) return result;
+	for (const [file, content] of result.outputs) writeFileSync(file, content);
+	return { ...result, status: "generated", changed: result.stale.length > 0 };
+}
+
+function checkDocsCommand(targetPath = ".", options = {}) {
+	const result = evaluateDocs(resolve(targetPath));
+	const violations = [
+		...result.violations,
+		...result.stale.map((file) => `${file} is stale. Run stackwarden generate docs.`),
+	];
+	return {
+		...result,
+		blocking: Boolean(options.strict && violations.length > 0),
+		wouldBlockIfStrict: violations.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: violations.length > 0 ? "failed" : "passed",
+		violations,
+	};
+}
+
+function evaluateDocs(root) {
+	const outputs = new Map();
+	const violations = [];
+	for (const readme of findReadmes(root)) {
+		const path = resolve(root, readme);
+		try {
+			const current = readFileSync(path, "utf8");
+			const next = updateReadmeTreeSections(root, readme, current);
+			if (next !== current) outputs.set(path, next);
+		} catch (error) {
+			violations.push(error instanceof Error ? error.message : String(error));
+		}
+	}
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "docs",
+		blocking: false,
+		status: violations.length > 0 ? "failed" : outputs.size > 0 ? "stale" : "passed",
+		violations,
+		warnings: [],
+		stale: [...outputs.keys()].map((file) => normalizePath(file.slice(root.length + 1))),
+		outputs,
+	};
+}
+
+const REPO_TREE_START_RE = /<!--\s*repo-tree:start(?<attrs>.*?)-->/g;
+const REPO_TREE_END = "<!-- repo-tree:end -->";
+const DEFAULT_TREE_IGNORE = new Set([
+	".git",
+	".next",
+	".turbo",
+	"node_modules",
+	"coverage",
+	"logs",
+	"dist",
+	"build",
+	".mastra",
+]);
+
+function findReadmes(root) {
+	return listFiles(root, 5000).filter((file) => /^README\.md$/i.test(basename(file)));
+}
+
+function updateReadmeTreeSections(root, readmePath, content) {
+	let output = "";
+	let cursor = 0;
+	REPO_TREE_START_RE.lastIndex = 0;
+	for (const match of content.matchAll(REPO_TREE_START_RE)) {
+		const startIndex = match.index ?? 0;
+		const afterStart = startIndex + match[0].length;
+		const endIndex = content.indexOf(REPO_TREE_END, afterStart);
+		if (endIndex === -1) throw new Error(`${readmePath}: repo-tree:start marker without repo-tree:end marker`);
+		const attrs = parseAttrs(match.groups?.attrs ?? "");
+		const treeRoot = attrs.path ?? dirnameOfRelativeReadme(readmePath);
+		const tree = renderDirectoryTree(root, treeRoot, {
+			depth: Number(attrs.depth ?? 2),
+			files: attrs.files !== "false",
+			ignore: attrs.ignore ? attrs.ignore.split(",") : [],
+		});
+		const replacement = `${match[0]}\n\n\`\`\`txt\n${tree}\n\`\`\`\n\n${REPO_TREE_END}`;
+		output += content.slice(cursor, startIndex);
+		output += replacement;
+		cursor = endIndex + REPO_TREE_END.length;
+	}
+	output += content.slice(cursor);
+	return output;
+}
+
+function parseAttrs(raw) {
+	const attrs = {};
+	const attrRe = /(\w+)="([^"]*)"/g;
+	for (const match of raw.matchAll(attrRe)) attrs[match[1]] = match[2];
+	return attrs;
+}
+
+function dirnameOfRelativeReadme(readmePath) {
+	const parts = readmePath.split("/");
+	parts.pop();
+	return parts.length > 0 ? parts.join("/") : ".";
+}
+
+function renderDirectoryTree(root, treeRoot, options = {}) {
+	const depth = Number(options.depth ?? 2);
+	const includeFiles = options.files === true;
+	const ignore = new Set([
+		...DEFAULT_TREE_IGNORE,
+		...(options.ignore ?? []).map((item) => String(item).trim()).filter(Boolean),
+	]);
+	const lines = [treeRoot];
+	appendTreeChildren(resolve(root, treeRoot), "", 0, depth, includeFiles, ignore, lines);
+	return lines.join("\n");
+}
+
+function appendTreeChildren(dir, prefix, level, maxDepth, includeFiles, ignore, lines) {
+	if (level >= maxDepth || !existsSync(dir)) return;
+	const entries = readdirSync(dir, { withFileTypes: true })
+		.filter((entry) => !ignore.has(entry.name))
+		.filter((entry) => includeFiles || entry.isDirectory())
+		.sort((a, b) => (a.isDirectory() !== b.isDirectory() ? (a.isDirectory() ? -1 : 1) : a.name.localeCompare(b.name)));
+	entries.forEach((entry, index) => {
+		const isLast = index === entries.length - 1;
+		const connector = isLast ? "└── " : "├── ";
+		const childPrefix = isLast ? "    " : "│   ";
+		const marker = entry.isDirectory() ? "/" : "";
+		lines.push(`${prefix}${connector}${entry.name}${marker}`);
+		if (entry.isDirectory())
+			appendTreeChildren(
+				join(dir, entry.name),
+				`${prefix}${childPrefix}`,
+				level + 1,
+				maxDepth,
+				includeFiles,
+				ignore,
+				lines,
+			);
+	});
+}
+
+function checkDocsGovernanceCommand(targetPath = ".", options = {}) {
+	const root = resolve(targetPath);
+	const config = loadDocumentationConfig(root);
+	const files = listFiles(root, 8000)
+		.filter((file) => config.allowedExtensions.includes(extnameOf(file)))
+		.filter((file) => !matchesAnyGlob(file, config.ignoredPaths));
+	const violations = [];
+	for (const file of files) {
+		const isGenerated = matchesAnyGlob(file, config.generatedPaths);
+		const body = readFileSync(resolve(root, file), "utf8").slice(0, 1000);
+		const hasMarker = config.requiredGeneratedMarkers.some((marker) => body.includes(marker));
+		if (isGenerated) {
+			if (!hasMarker) violations.push(`generated Markdown missing marker: ${file}`);
+			continue;
+		}
+		if (
+			hasMarker ||
+			matchesAnyGlob(file, config.allowedHandwrittenGlobs) ||
+			config.legacyHandwrittenPaths.includes(file)
+		)
+			continue;
+		violations.push(`untracked handwritten Markdown: ${file}`);
+	}
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "docs-governance",
+		blocking: Boolean(options.strict && violations.length > 0),
+		wouldBlockIfStrict: violations.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: violations.length > 0 ? "failed" : "passed",
+		violations,
+		warnings: [],
+		filesChecked: files.length,
+	};
+}
+
+function checkHandwrittenDocsCommand(targetPath = ".", options = {}) {
+	const root = resolve(targetPath);
+	const config = loadDocumentationConfig(root);
+	const files = options.files ?? getStagedMarkdownFiles(root, config);
+	const warnings = [];
+	for (const file of files) {
+		if (matchesAnyGlob(file, config.ignoredPaths) || !config.allowedExtensions.includes(extnameOf(file))) continue;
+		const body = existsSync(resolve(root, file)) ? readFileSync(resolve(root, file), "utf8").slice(0, 1000) : "";
+		const hasMarker = config.requiredGeneratedMarkers.some((marker) => body.includes(marker));
+		if (hasMarker) continue;
+		if (matchesAnyGlob(file, config.generatedPaths))
+			warnings.push({
+				file,
+				reason: "generated path without generated-from marker",
+				action: "regenerate the file from .stackwarden/documentation.yml",
+			});
+		else if (config.legacyHandwrittenPaths.includes(file))
+			warnings.push({
+				file,
+				reason: "legacy handwritten documentation",
+				action: "migrate durable facts into .stackwarden/*.yml",
+			});
+		else if (!matchesAnyGlob(file, config.allowedHandwrittenGlobs))
+			warnings.push({
+				file,
+				reason: "non-generated Markdown not covered by documentation governance",
+				action: "generate it or allowlist it in .stackwarden/documentation.yml",
+			});
+	}
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "handwritten-docs",
+		blocking: Boolean(options.strict && warnings.length > 0),
+		wouldBlockIfStrict: warnings.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: warnings.length > 0 ? "warning" : "passed",
+		violations: options.strict ? warnings.map((warning) => `${warning.file}: ${warning.reason}`) : [],
+		warnings: warnings.map((warning) => `${warning.file}: ${warning.reason}; ${warning.action}`),
+		details: warnings,
+	};
+}
+
+function loadDocumentationConfig(root) {
+	const sourcePath = resolve(root, ".stackwarden/documentation.yml");
+	const defaults = {
+		ignoredPaths: ["node_modules/**", ".git/**", "dist/**", "coverage/**"],
+		allowedExtensions: [".md", ".mdx"],
+		requiredGeneratedMarkers: ["generated-from:", "repo-tree:start"],
+		generatedPaths: [],
+		allowedHandwrittenGlobs: [
+			"README.md",
+			"docs/**",
+			"CONTRIBUTING.md",
+			"SECURITY.md",
+			"CODE_OF_CONDUCT.md",
+			"AGENTS.md",
+			"CLAUDE.md",
+		],
+		legacyHandwrittenPaths: [],
+	};
+	if (!existsSync(sourcePath)) return defaults;
+	const source = readFileSync(sourcePath, "utf8");
+	return {
+		ignoredPaths: readYamlList(source, "ignoredPaths", defaults.ignoredPaths),
+		allowedExtensions: readYamlList(source, "allowedExtensions", defaults.allowedExtensions),
+		requiredGeneratedMarkers: readYamlList(source, "requiredGeneratedMarkers", defaults.requiredGeneratedMarkers),
+		generatedPaths: readNestedYamlList(source, "generatedMarkdown", "paths", defaults.generatedPaths),
+		allowedHandwrittenGlobs: readYamlList(source, "allowedHandwrittenGlobs", defaults.allowedHandwrittenGlobs),
+		legacyHandwrittenPaths: readYamlList(source, "legacyHandwrittenPaths", defaults.legacyHandwrittenPaths),
+	};
+}
+
+function getStagedMarkdownFiles(root, config) {
+	const result = spawnSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR"], {
+		cwd: root,
+		encoding: "utf8",
+	});
+	if (result.status !== 0) return [];
+	return result.stdout
+		.split("\n")
+		.map((file) => file.trim())
+		.filter(Boolean)
+		.filter((file) => config.allowedExtensions.includes(extnameOf(file)));
+}
+
+function readYamlList(source, key, fallback = []) {
+	const index = source.indexOf(`${key}:`);
+	if (index === -1) return fallback;
+	const lines = source.slice(index).split("\n").slice(1);
+	const values = [];
+	for (const line of lines) {
+		if (/^[A-Za-z][A-Za-z0-9_-]*:/.test(line)) break;
+		const match = line.match(/^\s*-\s+(.+)\s*$/);
+		if (match) values.push(cleanYamlScalar(match[1]));
+	}
+	return values;
+}
+
+function readNestedYamlList(source, parentKey, childKey, fallback = []) {
+	const parentIndex = source.indexOf(`${parentKey}:`);
+	if (parentIndex === -1) return fallback;
+	const parentBlock = source.slice(parentIndex);
+	const childIndex = parentBlock.indexOf(`  ${childKey}:`);
+	if (childIndex === -1) return fallback;
+	const lines = parentBlock.slice(childIndex).split("\n").slice(1);
+	const values = [];
+	for (const line of lines) {
+		if (/^\S/.test(line) || /^ {2}[A-Za-z][A-Za-z0-9_-]*:/.test(line)) break;
+		const match = line.match(/^\s*-\s+(.+)\s*$/);
+		if (match) values.push(cleanYamlScalar(match[1]));
+	}
+	return values;
+}
+
+function extnameOf(file) {
+	const name = basename(file).toLowerCase();
+	if (name.endsWith(".mdx")) return ".mdx";
+	if (name.endsWith(".md")) return ".md";
+	return "";
+}
+
+function matchesAnyGlob(file, patterns) {
+	return patterns.some((pattern) => matchesGlob(file, pattern));
+}
+
+function matchesGlob(file, pattern) {
+	const escaped = pattern
+		.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+		.replace(/\*\*\//g, "::DOUBLE_STAR_SLASH::")
+		.replace(/\*\*/g, "::DOUBLE_STAR::")
+		.replace(/\*/g, "[^/]*")
+		.replace(/::DOUBLE_STAR_SLASH::/g, "(?:.*/)?")
+		.replace(/::DOUBLE_STAR::/g, ".*");
+	return new RegExp(`^${escaped}$`).test(file);
+}
+
 export function runGovernance(mode = "status", targetPath = ".", options = {}) {
 	if (mode === "status") return governanceStatusCommand(targetPath, options);
 	if (mode === "diff") return governanceDiffCommand(targetPath, options);
@@ -2286,9 +2665,16 @@ export function runGovernance(mode = "status", targetPath = ".", options = {}) {
 }
 
 function governanceStatusCommand(targetPath = ".", options = {}) {
-	const checks = ["projections", "agents", "codeowners", "workspaces", "pipeline", "local-bypass"].map((name) =>
-		runCheck(name, targetPath, options),
-	);
+	const checks = [
+		"projections",
+		"agents",
+		"docs",
+		"docs-governance",
+		"codeowners",
+		"workspaces",
+		"pipeline",
+		"local-bypass",
+	].map((name) => runCheck(name, targetPath, options));
 	const violations = checks.flatMap((check) => check.violations ?? []);
 	const warnings = checks.flatMap((check) => check.warnings ?? []);
 	return {
@@ -2402,9 +2788,16 @@ function checkLocalBypassCommand(targetPath = ".", options = {}) {
 }
 
 function checkGovernanceCommand(targetPath = ".", options = {}) {
-	const checks = ["projections", "agents", "codeowners", "workspaces", "pipeline", "local-bypass"].map((name) =>
-		runCheck(name, targetPath, options),
-	);
+	const checks = [
+		"projections",
+		"agents",
+		"docs",
+		"docs-governance",
+		"codeowners",
+		"workspaces",
+		"pipeline",
+		"local-bypass",
+	].map((name) => runCheck(name, targetPath, options));
 	const violations = checks.flatMap((check) => check.violations ?? []);
 	const warnings = checks.flatMap((check) => check.warnings ?? []);
 	return {

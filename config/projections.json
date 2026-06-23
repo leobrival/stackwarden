@@ -49,6 +49,16 @@
 			]
 		},
 		{
+			"id": "public-export",
+			"path": "config/public-export.json",
+			"schema": "schemas/public-export.schema.json",
+			"role": "export-source",
+			"owner": "stackwarden-core",
+			"generates": [
+				"dist/stackwarden-public"
+			]
+		},
+		{
 			"id": "client-config-template",
 			"path": "templates/config.yml",
 			"schema": "schemas/config.schema.json",

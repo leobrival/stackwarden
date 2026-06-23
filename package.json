@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stackwarden/stackwarden.git"
+    "url": "git+https://github.com/leobrival/stackwarden.git"
   },
   "files": [
     "src/index.js",
@@ -19,7 +19,6 @@
     "schemas",
     "scripts",
     "README.md",
-    "schemas/public-export.schema.json",
     "docs/public-cloud-split.md"
   ],
   "scripts": {

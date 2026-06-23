@@ -1,0 +1,102 @@
+{
+	"$schema": "../schemas/projections.schema.json",
+	"schemaVersion": 1,
+	"name": "stackwarden-projections",
+	"sourceOfTruth": "packages/stackwarden/config/projections.json",
+	"policy": {
+		"generatedDocsMustDeclareSource": true,
+		"sourcesMustDeclareSchema": true,
+		"checksMustCompareOutputToSource": true,
+		"allConfigSourcesMustBeRegistered": true
+	},
+	"sources": [
+		{
+			"id": "projection-registry",
+			"path": "config/projections.json",
+			"schema": "schemas/projections.schema.json",
+			"role": "projection-registry",
+			"owner": "stackwarden-core",
+			"generates": []
+		},
+		{
+			"id": "open-core-model",
+			"path": "config/open-core-model.json",
+			"schema": "schemas/open-core-model.schema.json",
+			"role": "projection-source",
+			"owner": "stackwarden-core",
+			"generates": [
+				"docs/open-core-model.md"
+			]
+		},
+		{
+			"id": "business-testing",
+			"path": "config/business-testing.json",
+			"schema": "schemas/business-testing.schema.json",
+			"role": "projection-source",
+			"owner": "stackwarden-core",
+			"generates": [
+				"docs/business-testing.md"
+			]
+		},
+		{
+			"id": "governance-model",
+			"path": "config/governance-model.json",
+			"schema": "schemas/governance-model.schema.json",
+			"role": "projection-source",
+			"owner": "stackwarden-core",
+			"generates": [
+				"docs/governance-model.md"
+			]
+		},
+		{
+			"id": "client-config-template",
+			"path": "templates/config.yml",
+			"schema": "schemas/config.schema.json",
+			"role": "client-template",
+			"owner": "stackwarden-core",
+			"generates": []
+		},
+		{
+			"id": "client-capabilities-template",
+			"path": "templates/capabilities.yml",
+			"schema": "schemas/capabilities.schema.json",
+			"role": "client-template",
+			"owner": "stackwarden-core",
+			"generates": []
+		},
+		{
+			"id": "lefthook-template",
+			"path": "templates/lefthook.yml",
+			"schema": "schemas/lefthook-template.schema.json",
+			"role": "client-template",
+			"owner": "stackwarden-core",
+			"generates": []
+		}
+	],
+	"projections": [
+		{
+			"id": "open-core-model-doc",
+			"source": "config/open-core-model.json",
+			"schema": "schemas/open-core-model.schema.json",
+			"target": "docs/open-core-model.md",
+			"generator": "docs:open-core:generate",
+			"checker": "docs:open-core:check"
+		},
+		{
+			"id": "business-testing-doc",
+			"source": "config/business-testing.json",
+			"schema": "schemas/business-testing.schema.json",
+			"target": "docs/business-testing.md",
+			"generator": "docs:business-testing:generate",
+			"checker": "docs:business-testing:check"
+		},
+		{
+			"id": "governance-model-doc",
+			"source": "config/governance-model.json",
+			"schema": "schemas/governance-model.schema.json",
+			"target": "docs/governance-model.md",
+			"generator": "docs:governance-model:generate",
+			"checker": "docs:governance-model:check"
+		}
+	]
+}

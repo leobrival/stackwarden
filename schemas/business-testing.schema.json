@@ -1,0 +1,43 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://stackwarden.dev/schemas/business-testing.schema.json",
+	"title": "StackWarden business testing source of truth",
+	"type": "object",
+	"required": [
+		"$schema",
+		"schemaVersion",
+		"name",
+		"sourceOfTruth",
+		"methodologySource",
+		"generatedDocument",
+		"purpose",
+		"principles",
+		"traceability",
+		"rules"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"$schema": { "type": "string" },
+		"schemaVersion": { "const": 1 },
+		"name": { "const": "stackwarden-business-testing" },
+		"sourceOfTruth": { "type": "string" },
+		"methodologySource": { "type": "string" },
+		"generatedDocument": { "type": "string" },
+		"purpose": { "type": "string" },
+		"principles": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+		"traceability": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["businessIntent", "feature", "executableTest"],
+				"additionalProperties": false,
+				"properties": {
+					"businessIntent": { "type": "string" },
+					"feature": { "type": "string" },
+					"executableTest": { "type": "string" }
+				}
+			}
+		},
+		"rules": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+	}
+}

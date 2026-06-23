@@ -1,0 +1,42 @@
+{
+  "name": "stackwarden",
+  "version": "0.1.4",
+  "description": "Terminal-first codebase governance and health CLI.",
+  "type": "module",
+  "bin": {
+    "stackwarden": "src/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stackwarden/stackwarden.git"
+  },
+  "files": [
+    "src/index.js",
+    "templates",
+    "features",
+    "docs",
+    "config",
+    "schemas",
+    "scripts",
+    "README.md",
+    "schemas/public-export.schema.json",
+    "docs/public-cloud-split.md"
+  ],
+  "scripts": {
+    "test": "node --test src/*.test.js",
+    "check": "npm test"
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "keywords": [
+    "governance",
+    "codebase",
+    "audit",
+    "cli",
+    "health",
+    "repository"
+  ],
+  "license": "UNLICENSED",
+  "private": false
+}

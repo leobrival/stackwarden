@@ -1,0 +1,62 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://stackwarden.dev/schemas/projections.schema.json",
+	"title": "StackWarden generated projection registry",
+	"type": "object",
+	"required": ["$schema", "schemaVersion", "name", "sourceOfTruth", "policy", "sources", "projections"],
+	"additionalProperties": false,
+	"properties": {
+		"$schema": { "type": "string" },
+		"schemaVersion": { "const": 1 },
+		"name": { "const": "stackwarden-projections" },
+		"sourceOfTruth": { "type": "string" },
+		"policy": {
+			"type": "object",
+			"required": [
+				"generatedDocsMustDeclareSource",
+				"sourcesMustDeclareSchema",
+				"checksMustCompareOutputToSource",
+				"allConfigSourcesMustBeRegistered"
+			],
+			"additionalProperties": false,
+			"properties": {
+				"generatedDocsMustDeclareSource": { "type": "boolean" },
+				"sourcesMustDeclareSchema": { "type": "boolean" },
+				"checksMustCompareOutputToSource": { "type": "boolean" },
+				"allConfigSourcesMustBeRegistered": { "type": "boolean" }
+			}
+		},
+		"sources": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["id", "path", "schema", "role", "owner", "generates"],
+				"additionalProperties": false,
+				"properties": {
+					"id": { "type": "string" },
+					"path": { "type": "string" },
+					"schema": { "type": "string" },
+					"role": { "enum": ["projection-registry", "projection-source", "client-template"] },
+					"owner": { "type": "string" },
+					"generates": { "type": "array", "items": { "type": "string" } }
+				}
+			}
+		},
+		"projections": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["id", "source", "schema", "target", "generator", "checker"],
+				"additionalProperties": false,
+				"properties": {
+					"id": { "type": "string" },
+					"source": { "type": "string" },
+					"schema": { "type": "string" },
+					"target": { "type": "string" },
+					"generator": { "type": "string" },
+					"checker": { "type": "string" }
+				}
+			}
+		}
+	}
+}

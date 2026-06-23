@@ -1,0 +1,51 @@
+$schema: ../schemas/capabilities.schema.json
+version: 1
+name: stackwarden-capabilities
+
+access:
+  tier: core
+  mode: local
+  visibility: full
+
+capabilities:
+  rules:
+    core:
+      enabled: true
+      execution: local
+      visibility: full
+    premium:
+      enabled: false
+      execution: server
+      visibility: masked
+  scripts:
+    auditFast:
+      enabled: true
+      command: stackwarden audit --fast
+    auditDeep:
+      enabled: true
+      command: stackwarden audit --deep
+    preCommitLoop:
+      enabled: true
+      command: stackwarden hook pre-commit
+    envDrift:
+      enabled: true
+      command: stackwarden check env-drift
+    docsDrift:
+      enabled: true
+      command: stackwarden check docs-drift
+    commitSize:
+      enabled: true
+      command: stackwarden check commit-size
+  features:
+    terminalScore:
+      enabled: true
+    jsonExport:
+      enabled: true
+    serverRules:
+      enabled: false
+
+policy:
+  addCapabilityWhen:
+    implementedInCode: true
+    relevantForClientUse: true
+  doNotExposePremiumRuleLogic: true

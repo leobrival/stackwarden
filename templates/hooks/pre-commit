@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -eu
+
+# Advisory local loop: runs a fast StackWarden audit and commit-size guard.
+stackwarden hook pre-commit

@@ -1,0 +1,81 @@
+{
+	"$schema": "../schemas/open-core-model.schema.json",
+	"schemaVersion": 1,
+	"name": "stackwarden-open-core-model",
+	"sourceOfTruth": "packages/stackwarden/config/open-core-model.json",
+	"generatedDocument": "packages/stackwarden/docs/open-core-model.md",
+	"principles": [
+		"StackWarden is advisory by default: it observes, evaluates, recommends, and lets teams configure enforcement.",
+		"Install and audit commands must not mutate client repositories.",
+		"Only explicit write commands may create files, and current init output is limited to .stackwarden/.",
+		"Core rules run locally and expose their deterministic logic.",
+		"Premium rules must run server-side, through licensed rulesets, or remain masked so client packages do not expose premium logic.",
+		"Secret values must never be printed in check, audit, hook, report, or plan outputs.",
+		"Blocking behavior is opt-in through .stackwarden/config.yml or an explicit strict flag."
+	],
+	"tiers": [
+		{
+			"name": "core-local",
+			"visibility": "full",
+			"execution": "local",
+			"includedInPackage": true,
+			"description": "Deterministic checks and findings implemented in the npm package and safe to inspect locally.",
+			"examples": [
+				"auditRepository deterministic findings",
+				"stackwarden check commit-size",
+				"stackwarden check env-drift",
+				"stackwarden check docs-drift",
+				"stackwarden plan"
+			]
+		},
+		{
+			"name": "licensed-ruleset",
+			"visibility": "summary",
+			"execution": "local-or-remote",
+			"includedInPackage": false,
+			"description": "Optional licensed rule bundles that may expose summaries while protecting proprietary rule implementation.",
+			"examples": ["organization-specific policy packs", "encrypted benchmark rule bundles"]
+		},
+		{
+			"name": "premium-server",
+			"visibility": "masked",
+			"execution": "server",
+			"includedInPackage": false,
+			"description": "Advanced analysis whose logic must not be shipped in the open npm package.",
+			"examples": [
+				"cross-repository benchmark intelligence",
+				"churn-weighted hotspot analysis",
+				"private maturity scoring models"
+			]
+		}
+	],
+	"localGuarantees": [
+		"No install-time mutation.",
+		"No writes outside .stackwarden/ from init --write.",
+		"No secret value output.",
+		"No hidden premium rule logic in the published core package.",
+		"No blocking unless configured or strict mode is explicitly requested."
+	],
+	"configFiles": [
+		{
+			"path": ".stackwarden/capabilities.yml",
+			"purpose": "Declares available local, licensed, and server-side capabilities plus their visibility boundaries."
+		},
+		{
+			"path": ".stackwarden/config.yml",
+			"purpose": "Controls repository-specific advisory policy, blocking choices, and local preferences."
+		}
+	],
+	"jsonContract": {
+		"coreFinding": {
+			"accessTier": "core",
+			"visibility": "full",
+			"implemented": true
+		},
+		"premiumFinding": {
+			"accessTier": "premium",
+			"visibility": "masked",
+			"implemented": false
+		}
+	}
+}

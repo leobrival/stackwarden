@@ -1,0 +1,32 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://stackwarden.dev/schemas/capabilities.schema.json",
+	"title": "StackWarden capabilities config",
+	"type": "object",
+	"required": ["$schema", "version", "name", "access", "capabilities", "policy"],
+	"additionalProperties": true,
+	"properties": {
+		"$schema": { "type": "string" },
+		"version": { "const": 1 },
+		"name": { "const": "stackwarden-capabilities" },
+		"access": {
+			"type": "object",
+			"required": ["tier", "mode", "visibility"],
+			"properties": {
+				"tier": { "enum": ["core", "licensed", "premium"] },
+				"mode": { "enum": ["local", "server", "hybrid"] },
+				"visibility": { "enum": ["full", "summary", "score_only", "masked"] }
+			}
+		},
+		"capabilities": {
+			"type": "object",
+			"required": ["rules", "scripts", "features"],
+			"properties": {
+				"rules": { "type": "object" },
+				"scripts": { "type": "object" },
+				"features": { "type": "object" }
+			}
+		},
+		"policy": { "type": "object" }
+	}
+}

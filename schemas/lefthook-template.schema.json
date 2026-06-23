@@ -1,0 +1,12 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://stackwarden.dev/schemas/lefthook-template.schema.json",
+	"title": "StackWarden Lefthook template",
+	"type": "object",
+	"required": ["$schema", "pre-commit"],
+	"additionalProperties": true,
+	"properties": {
+		"$schema": { "type": "string" },
+		"pre-commit": { "type": "object" }
+	}
+}

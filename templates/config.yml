@@ -1,0 +1,79 @@
+$schema: ../schemas/config.schema.json
+version: 1
+name: stackwarden-config
+
+recommendationPolicy:
+  defaultSeverity: advisory
+  blockOnRecommendedConfigMissing: false
+  explainWhenConfigWouldImproveSignal: true
+
+material:
+  dependencyUpdates:
+    enabled: true
+    mode: recommend
+    autoApply: false
+    packageManagers:
+      npm: true
+      pnpm: true
+      yarn: true
+      bun: true
+    allowMajorUpdates: false
+    allowMinorUpdates: true
+    allowPatchUpdates: true
+    requireHumanReview: true
+    securityOnly: false
+    supplyChainProtection:
+      blockFreshReleases: true
+      minimumReleaseAgeDays: 3
+      rationale: >-
+        Delay dependency upgrades to reduce exposure to newly published
+        malicious packages, supply-chain compromise, and exfiltration attacks.
+      supportedPackageJsonConfigKeys:
+        - minimumReleaseAge
+        - minimumReleaseAgeDays
+        - minimumDependencyReleaseAgeDays
+    commands:
+      npm: npm outdated
+      pnpm: pnpm outdated
+      yarn: yarn outdated
+      bun: bun outdated
+
+qualityContract:
+  requiredScripts:
+    - lint
+    - typecheck
+    - test
+  validationCommands:
+    - lint
+    - typecheck
+    - test
+  rationale: >-
+    Keep repository validation explicit so humans and AI agents run the same
+    deterministic commands before handing work over.
+
+governance:
+  recommendedFiles:
+    - README.md
+    - CODEOWNERS
+    - .github/workflows
+    - .stackwarden/capabilities.yml
+
+continuousImprovement:
+  preCommitFastAudit:
+    enabled: true
+    command: stackwarden hook pre-commit
+    blocking: false
+  commitSize:
+    blocking: false
+    warnFiles: 25
+    warnLines: 800
+    failFiles: 80
+    failLines: 2500
+  envDrift:
+    blocking: false
+    recommended: true
+  documentationDrift:
+    blocking: false
+    recommended: true
+  affectedChecks:
+    recommendedForWorkspaces: true

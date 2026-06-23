@@ -1,0 +1,97 @@
+{
+	"$schema": "../schemas/governance-model.schema.json",
+	"schemaVersion": 1,
+	"name": "stackwarden-governance-model",
+	"sourceOfTruth": "packages/stackwarden/config/governance-model.json",
+	"generatedDocument": "packages/stackwarden/docs/governance-model.md",
+	"purpose": "Expose a client-facing deterministic governance model without leaking internal methodology names, private playbooks, or premium rule logic.",
+	"principles": [
+		"Repository governance must be expressed as explicit, reviewable configuration before it becomes documentation or automation.",
+		"Every durable rule should have a source, owner, validation command, and projection or runtime consumer.",
+		"Human and AI contributors should rely on the same small deterministic commands instead of implicit team memory.",
+		"Generated or derived surfaces must be marked and freshness-checked so drift is visible.",
+		"New rules start advisory until signal quality is proven, then teams may opt into blocking enforcement."
+	],
+	"domains": [
+		{
+			"id": "quality-contract",
+			"label": "Quality contract",
+			"clientFiles": ["package.json", ".stackwarden/config.yml", "biome.json", "eslint.config.js", "tsconfig.json"],
+			"checks": ["lint", "format", "typecheck", "test", "build"],
+			"brickSignals": ["script exists", "config exists", "command is deterministic", "strictness is explicit"]
+		},
+		{
+			"id": "ownership-contract",
+			"label": "Ownership contract",
+			"clientFiles": ["CODEOWNERS", ".github/CODEOWNERS", ".stackwarden/config.yml"],
+			"checks": ["owner coverage", "protected path ownership", "review expectations"],
+			"brickSignals": ["owner file exists", "protected paths are declared", "review rules are documented"]
+		},
+		{
+			"id": "documentation-contract",
+			"label": "Documentation contract",
+			"clientFiles": ["README.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "docs/**"],
+			"checks": ["required docs", "generated markers", "freshness checks", "duplicate surfaces"],
+			"brickSignals": ["canonical source is clear", "generated docs declare source", "drift check exists"]
+		},
+		{
+			"id": "projection-contract",
+			"label": "Projection contract",
+			"clientFiles": ["config/**", "schemas/**", "docs/**", ".stackwarden/config.yml"],
+			"checks": ["schema exists", "source declares schema", "target declares source", "checker compares output"],
+			"brickSignals": ["source is registered", "schema is attached", "projection has generator and checker"]
+		},
+		{
+			"id": "ai-operating-contract",
+			"label": "AI operating contract",
+			"clientFiles": ["AGENTS.md", "CLAUDE.md", ".cursor/rules/**", ".stackwarden/config.yml"],
+			"checks": ["allowed actions", "blocked actions", "validation commands", "source-of-truth instructions"],
+			"brickSignals": [
+				"no secret access",
+				"no destructive actions without approval",
+				"validation commands are explicit"
+			]
+		}
+	],
+	"rules": [
+		{
+			"id": "SW-BRK-GOV-001",
+			"title": "Governance quality contract is missing",
+			"level": "brick",
+			"domain": "governance",
+			"detects": "No repository-local declaration of expected quality scripts or checks.",
+			"recommendation": "Declare the quality contract in a config-first surface such as .stackwarden/config.yml before adding more automation."
+		},
+		{
+			"id": "SW-BRK-GOV-002",
+			"title": "Quality scripts are declared but missing",
+			"level": "brick",
+			"domain": "quality",
+			"detects": "A governance config declares checks that package.json does not expose.",
+			"recommendation": "Add the missing scripts or update the governance source so humans and agents execute the same commands."
+		},
+		{
+			"id": "SW-BRK-GOV-003",
+			"title": "Generated projection has no freshness check",
+			"level": "brick",
+			"domain": "projections",
+			"detects": "A generated or derived document is present without an associated checker command.",
+			"recommendation": "Register a generator/checker pair so generated surfaces cannot silently drift."
+		},
+		{
+			"id": "SW-BRK-GOV-004",
+			"title": "AI operating rules are not deterministic",
+			"level": "brick",
+			"domain": "ai-guardrails",
+			"detects": "Agent instructions are missing explicit validation commands or safety boundaries.",
+			"recommendation": "Add concise, command-oriented guardrails for validation, source-of-truth updates, secrets, pushes, publication, and destructive edits."
+		}
+	],
+	"clientVocabulary": {
+		"sourceLayer": "governance source",
+		"projectionLayer": "generated projection",
+		"qualityLayer": "quality contract",
+		"agentLayer": "AI operating contract",
+		"privateMethodologyPolicy": "Do not expose internal methodology names in client-facing docs, findings, or package output."
+	}
+}

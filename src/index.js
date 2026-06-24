@@ -38,6 +38,14 @@ const LEVELS = [
 	},
 ];
 
+const DEFAULT_MANDATORY_FILES = [
+	"README.md",
+	"package.json",
+	".stackwarden/config.yml",
+	".stackwarden/capabilities.yml",
+	".stackwarden/documentation.yml",
+];
+
 const DEFAULT_EXCLUDES = new Set([
 	".git",
 	"node_modules",
@@ -163,7 +171,7 @@ function main(argv = process.argv.slice(2)) {
 }
 
 function parseArgs(argv) {
-	/** @type {AuditOptions & { write: boolean, help: boolean, version: boolean, ci: boolean, strict: boolean, dryRun: boolean, base?: string }} */
+	/** @type {AuditOptions & { write: boolean, help: boolean, version: boolean, ci: boolean, strict: boolean, dryRun: boolean, all: boolean, base?: string }} */
 	const options = {
 		mode: "fast",
 		json: false,
@@ -174,6 +182,7 @@ function parseArgs(argv) {
 		ci: false,
 		strict: false,
 		dryRun: false,
+		all: false,
 	};
 	let command;
 	let checkName;
@@ -186,6 +195,7 @@ function parseArgs(argv) {
 		else if (arg === "--verbose") options.verbose = true;
 		else if (arg === "--write") options.write = true;
 		else if (arg === "--dry-run") options.dryRun = true;
+		else if (arg === "--all") options.all = true;
 		else if (arg === "--base") options.base = argv[++index];
 		else if (arg.startsWith("--base=")) options.base = arg.slice("--base=".length);
 		else if (arg === "--ci") options.ci = true;
@@ -202,7 +212,7 @@ function parseArgs(argv) {
 function printHelp() {
 	console.log(
 		`StackWarden ${VERSION}\n\nUsage:\n  stackwarden audit [path] [--fast|--deep] [--json] [--ci]\n  stackwarden init [path] [--write] [--json]\n  stackwarden plan [path] [--json]\n  stackwarden hook pre-commit [--json] [--ci]
-  stackwarden check <commit-size|env-drift|docs-drift|docs|docs-governance|handwritten-docs|codeowners|workspaces|pipeline|agents|projections|governance|local-bypass> [--json] [--strict]
+  stackwarden check <commit-size|env-drift|docs-drift|docs|docs-governance|handwritten-docs|mandatory-files|codeowners|workspaces|pipeline|agents|projections|governance|local-bypass> [--json] [--strict] [--all]
   stackwarden generate <codeowners|workspaces|agents|docs> [path] [--json]
   stackwarden governance <status|diff> [path] [--json] [--strict]
   stackwarden affected <checks|tests|builds|verify> [path] [--base origin/main] [--dry-run] [--json]
@@ -1560,6 +1570,7 @@ export function runCheck(name, targetPath = ".", options = {}) {
 	if (name === "agents") return checkAgentsCommand(targetPath, checkOptions);
 	if (name === "projections") return checkProjectionsCommand(targetPath, checkOptions);
 	if (name === "governance") return checkGovernanceCommand(targetPath, checkOptions);
+	if (name === "mandatory-files") return checkMandatoryFilesCommand(targetPath, checkOptions);
 	if (name === "local-bypass") return checkLocalBypassCommand(targetPath, checkOptions);
 	if (name === "docs") return checkDocsCommand(targetPath, checkOptions);
 	if (name === "docs-governance") return checkDocsGovernanceCommand(targetPath, checkOptions);
@@ -1608,6 +1619,7 @@ function checkConfigKey(name) {
 			agents: "agents",
 			projections: "projections",
 			governance: "governance",
+			"mandatory-files": "mandatoryFiles",
 			"local-bypass": "localBypass",
 			docs: "docs",
 			"docs-governance": "docsGovernance",
@@ -1639,6 +1651,29 @@ function checkCommitSize(targetPath = ".", options = { strict: false, enforcemen
 		warnings: commitSize.softLimitExceeded ? ["staged commit exceeds recommended soft size"] : [],
 		commitSize,
 	};
+}
+
+function checkMandatoryFilesCommand(targetPath = ".", options = { strict: false, enforcement: "advisory" }) {
+	const root = resolve(targetPath);
+	const requiredFiles = readMandatoryFiles(root);
+	const missing = requiredFiles.filter((file) => !existsSync(join(root, file)));
+	return {
+		schemaVersion: 1,
+		tool: { name: "stackwarden", version: VERSION },
+		check: "mandatory-files",
+		blocking: Boolean(options.strict && missing.length > 0),
+		wouldBlockIfStrict: missing.length > 0,
+		enforcement: options.enforcement ?? (options.strict ? "strict" : "advisory"),
+		status: missing.length > 0 ? "failed" : "passed",
+		violations: missing.map((file) => `mandatory file missing: ${file}`),
+		warnings: [],
+		requiredFiles,
+	};
+}
+
+function readMandatoryFiles(root) {
+	const config = readTextIfExists(join(root, ".stackwarden/config.yml")) ?? "";
+	return readNestedYamlList(config, "governance", "requiredFiles", DEFAULT_MANDATORY_FILES);
 }
 
 function checkEnvDrift(targetPath = ".", options = { strict: false, enforcement: "advisory" }) {
@@ -1962,7 +1997,10 @@ capabilities:
       command: stackwarden check docs-governance
     handwrittenDocs:
       enabled: true
-      command: stackwarden check handwritten-docs
+      command: stackwarden check handwritten-docs --all
+    mandatoryFiles:
+      enabled: true
+      command: stackwarden check mandatory-files
     commitSize:
       enabled: true
       command: stackwarden check commit-size
@@ -2037,11 +2075,17 @@ qualityContract:
     deterministic commands before handing work over.
 
 governance:
-  recommendedFiles:
+  requiredFiles:
     - README.md
+    - package.json
+    - .stackwarden/config.yml
+    - .stackwarden/capabilities.yml
+    - .stackwarden/documentation.yml
+  recommendedFiles:
     - CODEOWNERS
     - .github/workflows
-    - .stackwarden/capabilities.yml
+    - SECURITY.md
+    - CONTRIBUTING.md
 
 continuousImprovement:
   preCommitFastAudit:
@@ -2061,6 +2105,9 @@ continuousImprovement:
     blocking: false
     recommended: true
   documentationGovernance:
+    blocking: false
+    recommended: true
+  mandatoryFiles:
     blocking: false
     recommended: true
   affectedChecks:
@@ -2109,6 +2156,8 @@ pre-commit:
   commands:
     stackwarden-fast-audit:
       run: stackwarden hook pre-commit
+    stackwarden-handwritten-docs-warning:
+      run: stackwarden check handwritten-docs --all
 `;
 }
 
@@ -2116,8 +2165,9 @@ function defaultPreCommitHook() {
 	return `#!/usr/bin/env sh
 set -eu
 
-# Advisory local loop: runs a fast StackWarden audit and commit-size guard.
+# Advisory local loop: runs a fast StackWarden audit, commit-size guard, and docs warnings.
 stackwarden hook pre-commit
+stackwarden check handwritten-docs --all
 `;
 }
 
@@ -2524,7 +2574,8 @@ function checkDocsGovernanceCommand(targetPath = ".", options = {}) {
 function checkHandwrittenDocsCommand(targetPath = ".", options = {}) {
 	const root = resolve(targetPath);
 	const config = loadDocumentationConfig(root);
-	const files = options.files ?? getStagedMarkdownFiles(root, config);
+	const files =
+		options.files ?? (options.all ? getAllMarkdownFiles(root, config) : getStagedMarkdownFiles(root, config));
 	const warnings = [];
 	for (const file of files) {
 		if (matchesAnyGlob(file, config.ignoredPaths) || !config.allowedExtensions.includes(extnameOf(file))) continue;
@@ -2607,6 +2658,13 @@ function getStagedMarkdownFiles(root, config) {
 		.filter((file) => config.allowedExtensions.includes(extnameOf(file)));
 }
 
+function getAllMarkdownFiles(root, config) {
+	return listFiles(root, 10000)
+		.map(normalizePath)
+		.filter((file) => config.allowedExtensions.includes(extnameOf(file)))
+		.filter((file) => !matchesAnyGlob(file, config.ignoredPaths));
+}
+
 function readYamlList(source, key, fallback = []) {
 	const index = source.indexOf(`${key}:`);
 	if (index === -1) return fallback;
@@ -2670,6 +2728,7 @@ function governanceStatusCommand(targetPath = ".", options = {}) {
 		"agents",
 		"docs",
 		"docs-governance",
+		"mandatory-files",
 		"codeowners",
 		"workspaces",
 		"pipeline",
@@ -2793,6 +2852,7 @@ function checkGovernanceCommand(targetPath = ".", options = {}) {
 		"agents",
 		"docs",
 		"docs-governance",
+		"mandatory-files",
 		"codeowners",
 		"workspaces",
 		"pipeline",

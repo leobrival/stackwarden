@@ -1,12 +1,21 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"x-stackwarden-governance": {
+		"presence": "required-for-config-validation",
+		"immutability": "schema-contract; breaking changes require a new schema version or explicit migration",
+		"lineOneRule": "The schema file must declare this governance contract at the top of the JSON object before domain properties are interpreted."
+	},
 	"$id": "https://stackwarden.dev/schemas/lefthook-template.schema.json",
 	"title": "StackWarden Lefthook template",
 	"type": "object",
 	"required": ["$schema", "pre-commit"],
 	"additionalProperties": true,
 	"properties": {
-		"$schema": { "type": "string" },
-		"pre-commit": { "type": "object" }
+		"$schema": {
+			"type": "string"
+		},
+		"pre-commit": {
+			"type": "object"
+		}
 	}
 }

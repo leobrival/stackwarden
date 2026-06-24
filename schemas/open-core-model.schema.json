@@ -1,5 +1,10 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"x-stackwarden-governance": {
+		"presence": "required-for-config-validation",
+		"immutability": "schema-contract; breaking changes require a new schema version or explicit migration",
+		"lineOneRule": "The schema file must declare this governance contract at the top of the JSON object before domain properties are interpreted."
+	},
 	"$id": "https://stackwarden.dev/schemas/open-core-model.schema.json",
 	"title": "StackWarden open-core model source of truth",
 	"type": "object",
@@ -17,12 +22,28 @@
 	],
 	"additionalProperties": false,
 	"properties": {
-		"$schema": { "type": "string" },
-		"schemaVersion": { "const": 1 },
-		"name": { "const": "stackwarden-open-core-model" },
-		"sourceOfTruth": { "type": "string" },
-		"generatedDocument": { "type": "string" },
-		"principles": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+		"$schema": {
+			"type": "string"
+		},
+		"schemaVersion": {
+			"const": 1
+		},
+		"name": {
+			"const": "stackwarden-open-core-model"
+		},
+		"sourceOfTruth": {
+			"type": "string"
+		},
+		"generatedDocument": {
+			"type": "string"
+		},
+		"principles": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			},
+			"minItems": 1
+		},
 		"tiers": {
 			"type": "array",
 			"minItems": 1,
@@ -31,16 +52,36 @@
 				"required": ["name", "visibility", "execution", "includedInPackage", "description", "examples"],
 				"additionalProperties": false,
 				"properties": {
-					"name": { "type": "string" },
-					"visibility": { "enum": ["full", "summary", "score_only", "masked"] },
-					"execution": { "enum": ["local", "local-or-remote", "server"] },
-					"includedInPackage": { "type": "boolean" },
-					"description": { "type": "string" },
-					"examples": { "type": "array", "items": { "type": "string" } }
+					"name": {
+						"type": "string"
+					},
+					"visibility": {
+						"enum": ["full", "summary", "score_only", "masked"]
+					},
+					"execution": {
+						"enum": ["local", "local-or-remote", "server"]
+					},
+					"includedInPackage": {
+						"type": "boolean"
+					},
+					"description": {
+						"type": "string"
+					},
+					"examples": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
 				}
 			}
 		},
-		"localGuarantees": { "type": "array", "items": { "type": "string" } },
+		"localGuarantees": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			}
+		},
 		"configFiles": {
 			"type": "array",
 			"items": {
@@ -48,12 +89,18 @@
 				"required": ["path", "purpose"],
 				"additionalProperties": false,
 				"properties": {
-					"path": { "type": "string" },
-					"purpose": { "type": "string" }
+					"path": {
+						"type": "string"
+					},
+					"purpose": {
+						"type": "string"
+					}
 				}
 			}
 		},
-		"jsonContract": { "type": "object" },
+		"jsonContract": {
+			"type": "object"
+		},
 		"onlineVersion": {
 			"type": "object",
 			"required": [
@@ -68,14 +115,39 @@
 			],
 			"additionalProperties": false,
 			"properties": {
-				"name": { "type": "string" },
-				"status": { "type": "string" },
-				"purpose": { "type": "string" },
-				"publicWebsite": { "type": "object" },
-				"cloudApi": { "type": "object" },
-				"freeCapabilities": { "type": "array", "items": { "type": "string" } },
-				"paidCapabilities": { "type": "array", "items": { "type": "string" } },
-				"publicLaunchChecklist": { "type": "array", "items": { "type": "string" } }
+				"name": {
+					"type": "string"
+				},
+				"status": {
+					"type": "string"
+				},
+				"purpose": {
+					"type": "string"
+				},
+				"publicWebsite": {
+					"type": "object"
+				},
+				"cloudApi": {
+					"type": "object"
+				},
+				"freeCapabilities": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"paidCapabilities": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"publicLaunchChecklist": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
 			}
 		}
 	}

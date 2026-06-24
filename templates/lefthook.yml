@@ -6,3 +6,5 @@ pre-commit:
   commands:
     stackwarden-fast-audit:
       run: stackwarden hook pre-commit
+    stackwarden-handwritten-docs-warning:
+      run: stackwarden check handwritten-docs --all

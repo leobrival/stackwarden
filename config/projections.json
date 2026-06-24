@@ -24,9 +24,7 @@
 			"schema": "schemas/open-core-model.schema.json",
 			"role": "projection-source",
 			"owner": "stackwarden-core",
-			"generates": [
-				"docs/open-core-model.md"
-			]
+			"generates": ["docs/open-core-model.md"]
 		},
 		{
 			"id": "business-testing",
@@ -34,9 +32,7 @@
 			"schema": "schemas/business-testing.schema.json",
 			"role": "projection-source",
 			"owner": "stackwarden-core",
-			"generates": [
-				"docs/business-testing.md"
-			]
+			"generates": ["docs/business-testing.md"]
 		},
 		{
 			"id": "governance-model",
@@ -44,9 +40,7 @@
 			"schema": "schemas/governance-model.schema.json",
 			"role": "projection-source",
 			"owner": "stackwarden-core",
-			"generates": [
-				"docs/governance-model.md"
-			]
+			"generates": ["docs/governance-model.md"]
 		},
 		{
 			"id": "public-export",
@@ -54,9 +48,7 @@
 			"schema": "schemas/public-export.schema.json",
 			"role": "export-source",
 			"owner": "stackwarden-core",
-			"generates": [
-				"dist/stackwarden-public"
-			]
+			"generates": ["dist/stackwarden-public"]
 		},
 		{
 			"id": "client-config-template",

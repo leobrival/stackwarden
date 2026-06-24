@@ -1,5 +1,10 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"x-stackwarden-governance": {
+		"presence": "required-for-config-validation",
+		"immutability": "schema-contract; breaking changes require a new schema version or explicit migration",
+		"lineOneRule": "The schema file must declare this governance contract at the top of the JSON object before domain properties are interpreted."
+	},
 	"$id": "https://stackwarden.dev/schemas/governance-model.schema.json",
 	"title": "StackWarden governance model source of truth",
 	"type": "object",
@@ -17,13 +22,31 @@
 	],
 	"additionalProperties": false,
 	"properties": {
-		"$schema": { "type": "string" },
-		"schemaVersion": { "const": 1 },
-		"name": { "const": "stackwarden-governance-model" },
-		"sourceOfTruth": { "type": "string" },
-		"generatedDocument": { "type": "string" },
-		"purpose": { "type": "string" },
-		"principles": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+		"$schema": {
+			"type": "string"
+		},
+		"schemaVersion": {
+			"const": 1
+		},
+		"name": {
+			"const": "stackwarden-governance-model"
+		},
+		"sourceOfTruth": {
+			"type": "string"
+		},
+		"generatedDocument": {
+			"type": "string"
+		},
+		"purpose": {
+			"type": "string"
+		},
+		"principles": {
+			"type": "array",
+			"items": {
+				"type": "string"
+			},
+			"minItems": 1
+		},
 		"domains": {
 			"type": "array",
 			"minItems": 1,
@@ -32,11 +55,30 @@
 				"required": ["id", "label", "clientFiles", "checks", "brickSignals"],
 				"additionalProperties": false,
 				"properties": {
-					"id": { "type": "string" },
-					"label": { "type": "string" },
-					"clientFiles": { "type": "array", "items": { "type": "string" } },
-					"checks": { "type": "array", "items": { "type": "string" } },
-					"brickSignals": { "type": "array", "items": { "type": "string" } }
+					"id": {
+						"type": "string"
+					},
+					"label": {
+						"type": "string"
+					},
+					"clientFiles": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"checks": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"brickSignals": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
 				}
 			}
 		},
@@ -48,12 +90,24 @@
 				"required": ["id", "title", "level", "domain", "detects", "recommendation"],
 				"additionalProperties": false,
 				"properties": {
-					"id": { "type": "string" },
-					"title": { "type": "string" },
-					"level": { "const": "brick" },
-					"domain": { "type": "string" },
-					"detects": { "type": "string" },
-					"recommendation": { "type": "string" }
+					"id": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"level": {
+						"const": "brick"
+					},
+					"domain": {
+						"type": "string"
+					},
+					"detects": {
+						"type": "string"
+					},
+					"recommendation": {
+						"type": "string"
+					}
 				}
 			}
 		},
@@ -62,11 +116,21 @@
 			"required": ["sourceLayer", "projectionLayer", "qualityLayer", "agentLayer", "privateMethodologyPolicy"],
 			"additionalProperties": false,
 			"properties": {
-				"sourceLayer": { "type": "string" },
-				"projectionLayer": { "type": "string" },
-				"qualityLayer": { "type": "string" },
-				"agentLayer": { "type": "string" },
-				"privateMethodologyPolicy": { "type": "string" }
+				"sourceLayer": {
+					"type": "string"
+				},
+				"projectionLayer": {
+					"type": "string"
+				},
+				"qualityLayer": {
+					"type": "string"
+				},
+				"agentLayer": {
+					"type": "string"
+				},
+				"privateMethodologyPolicy": {
+					"type": "string"
+				}
 			}
 		}
 	}

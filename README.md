@@ -29,7 +29,8 @@ npx stackwarden check env-drift --json
 npx stackwarden check docs-drift --json
 npx stackwarden check docs --json
 npx stackwarden check docs-governance --json
-npx stackwarden check handwritten-docs --json
+npx stackwarden check handwritten-docs --all --json
+npx stackwarden check mandatory-files --json
 npx stackwarden check commit-size --json
 npx stackwarden check codeowners --json
 npx stackwarden check workspaces --json
@@ -55,7 +56,8 @@ StackWarden includes side-effect-free local checks. They observe, evaluate, and 
 - `stackwarden check docs-drift` — detects generated documentation without provenance markers and duplicate Markdown surfaces.
 - `stackwarden generate docs` / `stackwarden check docs` — keeps README `repo-tree` sections fresh from configurable markers such as `<!-- repo-tree:start path="." depth="2" files="true" -->`.
 - `stackwarden check docs-governance` — validates generated Markdown provenance and untracked handwritten documentation using `.stackwarden/documentation.yml`.
-- `stackwarden check handwritten-docs` — warns on staged handwritten Markdown that should be generated, migrated, or allowlisted; advisory unless `--strict` is used.
+- `stackwarden check handwritten-docs` — warns on staged handwritten Markdown that should be generated, migrated, or allowlisted; add `--all` to scan every Markdown file. Advisory unless `--strict` is used.
+- `stackwarden check mandatory-files` — verifies public mandatory governance files declared in `.stackwarden/config.yml` under `governance.requiredFiles`.
 - `stackwarden check codeowners` / `stackwarden generate codeowners` — keeps `.github/CODEOWNERS` generated from `.stackwarden/ownership.yml`.
 - `stackwarden check workspaces` / `stackwarden generate workspaces` — keeps root and workspace README projections generated from `.stackwarden/workspaces.yml`.
 - `stackwarden check pipeline` / `stackwarden affected verify` — validates `.stackwarden/pipeline.yml` and runs or previews affected checks/tests/builds.
@@ -68,7 +70,7 @@ StackWarden includes side-effect-free local checks. They observe, evaluate, and 
 
 ## Commit-time feedback loop
 
-`stackwarden hook pre-commit` runs a fast local audit, deterministic commit-size guard, README tree freshness check, and handwritten-doc warning pass. It is advisory by default, so teams get continuous improvement recommendations on every commit without turning StackWarden into a surprise blocker.
+`stackwarden hook pre-commit` runs a fast local audit, deterministic commit-size guard, README tree freshness check, and handwritten-doc warning pass. The generated Lefthook template also runs `stackwarden check handwritten-docs --all` so every non-generated Markdown file is surfaced as an advisory warning without blocking commits by default.
 
 `stackwarden init --write` creates optional hook templates under `.stackwarden/` only. Wire `.stackwarden/lefthook.yml` or `.stackwarden/hooks/pre-commit` into your local hook manager when you want automatic commit-time feedback.
 
@@ -140,6 +142,8 @@ continuousImprovement:
   documentationDrift:
     blocking: false
   documentationGovernance:
+    blocking: false
+  mandatoryFiles:
     blocking: false
 ```
 

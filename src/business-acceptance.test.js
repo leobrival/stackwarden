@@ -968,3 +968,50 @@ test("Business scenario: handwritten documentation check is advisory by default"
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test("Business scenario: mandatory governance files are configurable and advisory by default", () => {
+	const root = createRepo("stackwarden-business-mandatory-files-");
+	try {
+		mkdirSync(join(root, ".stackwarden"));
+		writeFileSync(
+			join(root, ".stackwarden/config.yml"),
+			`version: 1
+governance:
+  requiredFiles:
+    - README.md
+    - SECURITY.md
+`,
+		);
+		writeFileSync(join(root, "README.md"), "# ok\n");
+		const result = runCheck("mandatory-files", root, { json: true });
+		assert.equal(result.status, "failed");
+		assert.equal(result.blocking, false);
+		assert.ok(result.violations.some((violation) => violation.includes("SECURITY.md")));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Business scenario: handwritten-docs --all warns on every non-generated Markdown file", () => {
+	const root = createRepo("stackwarden-business-handwritten-all-");
+	try {
+		mkdirSync(join(root, ".stackwarden"));
+		mkdirSync(join(root, "docs/generated"), { recursive: true });
+		writeFileSync(
+			join(root, ".stackwarden/documentation.yml"),
+			"version: 1\nallowedExtensions:\n  - .md\nallowedHandwrittenGlobs:\n  - README.md\ngeneratedMarkdown:\n  paths:\n    - docs/generated/**\n",
+		);
+		writeFileSync(join(root, "README.md"), "# ok\n");
+		writeFileSync(join(root, "notes.md"), "# handwritten\n");
+		writeFileSync(join(root, "docs/generated/api.md"), "<!-- generated-from: test -->\n# generated\n");
+		const result = runCheck("handwritten-docs", root, { json: true, all: true });
+		assert.equal(result.status, "warning");
+		assert.ok(result.warnings.some((warning) => warning.includes("notes.md")));
+		assert.equal(
+			result.warnings.some((warning) => warning.includes("docs/generated/api.md")),
+			false,
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});

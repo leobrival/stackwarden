@@ -33,6 +33,18 @@ capabilities:
     docsDrift:
       enabled: true
       command: stackwarden check docs-drift
+    docs:
+      enabled: true
+      command: stackwarden check docs
+    docsGovernance:
+      enabled: true
+      command: stackwarden check docs-governance
+    handwrittenDocs:
+      enabled: true
+      command: stackwarden check handwritten-docs --all
+    mandatoryFiles:
+      enabled: true
+      command: stackwarden check mandatory-files
     commitSize:
       enabled: true
       command: stackwarden check commit-size

@@ -52,11 +52,17 @@ qualityContract:
     deterministic commands before handing work over.
 
 governance:
-  recommendedFiles:
+  requiredFiles:
     - README.md
+    - package.json
+    - .stackwarden/config.yml
+    - .stackwarden/capabilities.yml
+    - .stackwarden/documentation.yml
+  recommendedFiles:
     - CODEOWNERS
     - .github/workflows
-    - .stackwarden/capabilities.yml
+    - SECURITY.md
+    - CONTRIBUTING.md
 
 continuousImprovement:
   preCommitFastAudit:
@@ -73,6 +79,12 @@ continuousImprovement:
     blocking: false
     recommended: true
   documentationDrift:
+    blocking: false
+    recommended: true
+  documentationGovernance:
+    blocking: false
+    recommended: true
+  mandatoryFiles:
     blocking: false
     recommended: true
   affectedChecks:

@@ -1,6 +1,6 @@
 {
   "name": "stackwarden",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Terminal-first codebase governance and health CLI.",
   "type": "module",
   "bin": {

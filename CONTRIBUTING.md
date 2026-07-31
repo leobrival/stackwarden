@@ -45,6 +45,12 @@ npm run hooks:install
 
 The `commit-msg` hook validates commit messages. The `pre-push` hook validates the current branch name. GitHub Actions repeats both checks, validates every commit and the PR title, and runs the test suite, so local hooks are a fast feedback mechanism rather than the only control.
 
+GitHub Actions workflows are audited by zizmor on every pull request and every push to `main`. The check uses the pedantic persona and blocks findings. To run the same pinned version locally with `uv`:
+
+```bash
+uvx --from zizmor==1.28.0 zizmor --persona=pedantic .github/workflows
+```
+
 ## Integrate into the trunk
 
 1. Rebase or update from `main` before review when the branch is stale.

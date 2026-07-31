@@ -5,16 +5,22 @@ on:
     branches:
       - main
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+permissions: {}
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release-please:
+    name: Maintain release pull request
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # create releases and update release metadata
+      pull-requests: write # create and maintain the release pull request
+      issues: write # maintain release labels on linked issues
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json

@@ -22,8 +22,11 @@
     "docs/public-cloud-split.md"
   ],
   "scripts": {
-    "test": "node --test src/*.test.js",
-    "check": "npm test"
+    "test": "node --test src/*.test.js scripts/*.test.mjs",
+    "check": "npm test",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "delivery:branch": "node scripts/validate-delivery.mjs branch",
+    "delivery:commit": "node scripts/validate-delivery.mjs commit-msg"
   },
   "engines": {
     "node": ">=20.11"

@@ -74,6 +74,8 @@ StackWarden includes side-effect-free local checks. They observe, evaluate, and 
 
 `stackwarden init --write` creates optional hook templates under `.stackwarden/` only. Wire `.stackwarden/lefthook.yml` or `.stackwarden/hooks/pre-commit` into your local hook manager when you want automatic commit-time feedback.
 
+StackWarden itself uses Trunk Based Development: `main` is the only long-lived branch, topic branches are short-lived, and commits and PR titles follow Conventional Commits. See [CONTRIBUTING.md](./CONTRIBUTING.md). Install the repository's local branch and commit-message guardrails with `npm run hooks:install`.
+
 ## Package managers
 
 Public npm package target:

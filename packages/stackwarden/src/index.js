@@ -4,7 +4,9 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSyn
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "0.1.4";
+const VERSION = JSON.parse(
+	readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../package.json"), "utf8"),
+).version;
 const LEVELS = [
 	{
 		id: "material",

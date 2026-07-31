@@ -6,9 +6,9 @@
 		"target": "ES2022",
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
+		"types": ["node"],
 		"strict": true,
 		"noImplicitAny": false,
 		"skipLibCheck": true
-	},
-	"include": ["src/**/*.js"]
+	}
 }

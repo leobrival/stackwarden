@@ -23,6 +23,11 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.2.12
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
       - name: Validate branch name
         run: node scripts/validate-delivery.mjs branch "$HEAD_REF"
         env:
@@ -36,5 +41,5 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      - name: Run test suite
-        run: npm test
+      - name: Run repository checks
+        run: bun run check

@@ -52,7 +52,7 @@ Do not use vague subjects such as `fix stuff`, `update`, or `misc changes`. Put 
 3. Review the release PR as the release candidate:
    - version matches the commit impact;
    - changelog is complete, understandable, and contains no internal or sensitive detail;
-   - `npm run release:check` passes;
+   - `bun run release:check` passes from the repository root;
    - breaking changes include migration instructions;
    - the release contains only changes already integrated into `main`.
 4. Merge the release PR when it represents a coherent user-visible increment. There is no fixed release day; avoid holding completed fixes for an artificial train.
@@ -66,7 +66,7 @@ For an urgent correction, merge the fix PR and then the resulting release PR as 
 Definition of Done for every release:
 
 - [ ] The release PR is based on the latest `main` and required checks are green.
-- [ ] `npm run release:check` passes from a clean checkout.
+- [ ] `bun run release:check` passes from a clean checkout.
 - [ ] The proposed version follows the table above.
 - [ ] Changelog entries describe user impact and links resolve.
 - [ ] Breaking changes contain migration and rollback guidance.

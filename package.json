@@ -24,6 +24,7 @@
   "scripts": {
     "test": "node --test src/*.test.js scripts/*.test.mjs",
     "check": "npm test",
+    "release:check": "npm test && npm pack --dry-run",
     "hooks:install": "git config core.hooksPath .githooks",
     "delivery:branch": "node scripts/validate-delivery.mjs branch",
     "delivery:commit": "node scripts/validate-delivery.mjs commit-msg"

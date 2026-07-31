@@ -4,6 +4,14 @@ All notable changes to StackWarden are documented in this file.
 
 This project uses [Release Please](https://github.com/googleapis/release-please) and [Conventional Commits](https://www.conventionalcommits.org/) to generate changelog entries and GitHub releases. See the [release process](docs/release-process.md) for versioning and publication rules.
 
+## [0.2.2](https://github.com/leobrival/stackwarden/compare/v0.2.1...v0.2.2) (2026-07-31)
+
+
+### Code Refactoring
+
+* **monorepo:** adopt Bun workspace structure ([c0ce010](https://github.com/leobrival/stackwarden/commit/c0ce010062117c2ec867b808922b9604b21f8cd7))
+* **monorepo:** adopt Bun workspace structure ([0d0245b](https://github.com/leobrival/stackwarden/commit/0d0245b3138708893e5617db484a9fec2327fa86))
+
 ## [0.2.1](https://github.com/leobrival/stackwarden/compare/v0.2.0...v0.2.1) (2026-07-31)
 
 

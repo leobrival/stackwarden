@@ -1,0 +1,2 @@
+#!/bin/sh
+node scripts/validate-delivery.mjs commit-msg "$1"

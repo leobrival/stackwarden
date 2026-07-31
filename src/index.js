@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { VERSION } from "./version.js";
 
-const VERSION = "0.1.4";
 const LEVELS = [
 	{
 		id: "material",
@@ -101,14 +100,14 @@ function paint(value, code) {
  * @property {boolean} verbose
  */
 
-function main(argv = process.argv.slice(2)) {
+export function runCli(argv = process.argv.slice(2)) {
 	const { command, path, checkName, options } = parseArgs(argv);
-	if (options.help || command === "help") {
-		printHelp();
-		return;
-	}
 	if (options.version) {
 		console.log(VERSION);
+		return;
+	}
+	if (options.help || command === "help") {
+		printHelp();
 		return;
 	}
 	if (command === "audit") {
@@ -3659,14 +3658,3 @@ function printInitResult(result) {
 	for (const change of result.changes) console.log(`- ${change.action}: ${change.path}`);
 	if (!result.write) console.log(color.dim("Run with --write to create missing files."));
 }
-
-function isExecutedFile() {
-	if (!process.argv[1]) return false;
-	try {
-		return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
-	} catch {
-		return fileURLToPath(import.meta.url) === process.argv[1];
-	}
-}
-
-if (isExecutedFile()) main();

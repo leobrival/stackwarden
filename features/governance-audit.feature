@@ -5,6 +5,12 @@ Feature: Deterministic codebase governance audit
   StackWarden must transform repository governance intent into executable,
   verifiable, and traceable audit behavior.
 
+  Scenario: Reuse StackWarden as a package without executing the CLI
+    Given an application such as an Adonis control plane imports StackWarden
+    When it loads the package public API
+    Then the process remains free of CLI output and exit-code side effects
+    And the installed StackWarden binary still reports the package version
+
   Scenario: Audit a repository with missing ownership
     Given a repository without CODEOWNERS
     When I run stackwarden audit --fast

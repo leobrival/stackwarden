@@ -92,6 +92,22 @@ bunx stackwarden audit --fast
 
 The installed binary remains `stackwarden`.
 
+## Programmatic API
+
+The package also exposes its local engine without executing the CLI, so an Adonis control plane, GitHub Action, or other Node.js adapter can reuse the same deterministic behavior:
+
+```js
+import { auditRepository } from "stackwarden";
+
+const report = auditRepository("/path/to/repository", {
+  mode: "fast",
+  json: true,
+  verbose: false,
+});
+```
+
+The CLI stays a thin installable adapter. A future Adonis application should depend on this public API and remain a separate server deployable; Adonis is not started inside client repositories.
+
 ## Standardization plan
 
 `stackwarden plan` runs a deep audit and converts findings into a non-mutating standardization plan: tooling to add, supply-chain risk to reduce, governance gaps, business tests, and 5S cleanup opportunities.

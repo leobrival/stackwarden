@@ -3,8 +3,12 @@
   "version": "0.2.0",
   "description": "Terminal-first codebase governance and health CLI.",
   "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
   "bin": {
-    "stackwarden": "src/index.js"
+    "stackwarden": "src/cli.js"
   },
   "repository": {
     "type": "git",
@@ -12,6 +16,8 @@
   },
   "files": [
     "src/index.js",
+    "src/cli.js",
+    "src/version.js",
     "templates",
     "features",
     "docs",

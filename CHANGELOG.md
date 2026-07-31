@@ -4,6 +4,14 @@ All notable changes to StackWarden are documented in this file.
 
 This project uses [Release Please](https://github.com/googleapis/release-please) and [Conventional Commits](https://www.conventionalcommits.org/) to generate changelog entries and GitHub releases. See the [release process](docs/release-process.md) for versioning and publication rules.
 
+## [0.2.1](https://github.com/leobrival/stackwarden/compare/v0.2.0...v0.2.1) (2026-07-31)
+
+
+### Documentation
+
+* **release:** define versioning and changelog policy ([e18026e](https://github.com/leobrival/stackwarden/commit/e18026ee92c08236ef586c761e87c81f67b24572))
+* **release:** define versioning and changelog policy ([34c77b5](https://github.com/leobrival/stackwarden/commit/34c77b5a8a6de511b61b55f0eb1489415e22e67d))
+
 ## [0.2.0](https://github.com/leobrival/stackwarden/compare/v0.1.4...v0.2.0) (2026-06-24)
 
 

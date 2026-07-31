@@ -1,0 +1,57 @@
+{
+	"name": "stackwarden",
+	"version": "0.2.1",
+	"description": "Terminal-first codebase governance and health CLI.",
+	"type": "module",
+	"bin": {
+		"stackwarden": "src/index.js"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/leobrival/stackwarden.git",
+		"directory": "packages/stackwarden"
+	},
+	"files": [
+		"src/index.js",
+		"templates",
+		"features",
+		"docs",
+		"config",
+		"schemas",
+		"scripts",
+		"README.md"
+	],
+	"scripts": {
+		"typecheck": "tsc -p tsconfig.json",
+		"test": "node --test src/*.test.js",
+		"docs:open-core:generate": "node scripts/generate-open-core-doc.mjs",
+		"docs:open-core:check": "node scripts/generate-open-core-doc.mjs --check",
+		"docs:business-testing:generate": "node scripts/generate-business-testing-doc.mjs",
+		"docs:business-testing:check": "node scripts/generate-business-testing-doc.mjs --check",
+		"docs:governance-model:generate": "node scripts/generate-governance-model-doc.mjs",
+		"docs:governance-model:check": "node scripts/generate-governance-model-doc.mjs --check",
+		"docs:generate": "node scripts/check-projections.mjs --generate",
+		"docs:check": "node scripts/check-projections.mjs --freshness",
+		"projections:check": "node scripts/check-projections.mjs",
+		"config:schema:check": "node scripts/check-config-schemas.mjs",
+		"check": "bun run docs:check && bun run config:schema:check && bun run typecheck && bun run test",
+		"release:check": "bun run check && npm pack --dry-run",
+		"prepack": "bun run docs:check && bun run config:schema:check"
+	},
+	"devDependencies": {
+		"yaml": "^2.8.3"
+	},
+	"engines": {
+		"node": ">=20.11"
+	},
+	"keywords": [
+		"governance",
+		"codebase",
+		"audit",
+		"cli",
+		"health",
+		"repository"
+	],
+	"license": "UNLICENSED",
+	"private": false
+}

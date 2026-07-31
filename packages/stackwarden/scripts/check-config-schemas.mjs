@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const CHECKS = [
@@ -35,12 +35,7 @@ export const CHECKS = [
 			"rules",
 		],
 	},
-	{
-		kind: "json",
-		file: "config/public-export.json",
-		schema: "schemas/public-export.schema.json",
-		required: ["$schema", "outputDirectory", "packageName", "repositoryUrl", "forbiddenPatterns", "files"],
-	},
+
 	{
 		kind: "json",
 		file: "config/governance-model.json",
@@ -73,11 +68,7 @@ export const CHECKS = [
 ];
 
 function loadYaml(path) {
-	const json = execFileSync("ruby", ["-ryaml", "-rjson", "-e", "puts YAML.load_file(ARGV[0]).to_json", path], {
-		encoding: "utf8",
-		stdio: ["ignore", "pipe", "ignore"],
-	});
-	return JSON.parse(json);
+	return parse(readFileSync(path, "utf8"));
 }
 
 function load(root, file, kind) {

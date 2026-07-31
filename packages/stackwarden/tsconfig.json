@@ -1,0 +1,5 @@
+{
+	"extends": "../config/tsconfig.base.json",
+	"include": ["src/index.js", "scripts/**/*.mjs"],
+	"exclude": ["scripts/*.test.mjs"]
+}

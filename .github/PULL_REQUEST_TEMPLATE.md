@@ -4,7 +4,7 @@ Describe the change in one or more concise bullets.
 
 ## Validation
 
-- [ ] `npm test`
+- [ ] `bun run check`
 - [ ] Branch, commits, and PR title follow `CONTRIBUTING.md`
 - [ ] The change is backward-compatible or safely hidden behind a feature flag
 - [ ] User-visible and breaking changes use the correct release-impact commit type

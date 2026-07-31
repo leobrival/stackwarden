@@ -35,14 +35,14 @@ feat!: remove deprecated JSON fields
 
 Subjects are limited to 100 characters. Allowed types match the branch prefixes above. Use `!` for a breaking change and explain it in the commit body with `BREAKING CHANGE:`.
 
-Commit type determines the release impact. `feat` creates a minor release; `fix` and `perf` create a patch release. Before 1.0, a breaking change creates a minor release and must still use `!` plus a `BREAKING CHANGE:` footer. Internal `docs`, `test`, `build`, `ci`, `refactor`, and `chore` changes do not trigger a release by default. See [the release process](docs/release-process.md) for the full versioning, changelog, release, and rollback convention.
+Commit type determines the release impact. `feat` creates a minor release; `fix` and `perf` create a patch release. Before 1.0, a breaking change creates a minor release and must still use `!` plus a `BREAKING CHANGE:` footer. Internal `docs`, `test`, `build`, `ci`, `refactor`, and `chore` changes do not trigger a release by default. See [the release process](packages/stackwarden/docs/release-process.md) for the full versioning, changelog, release, and rollback convention.
 
 ## Local guardrails
 
 Install the tracked hooks once per clone:
 
 ```bash
-npm run hooks:install
+bun run hooks:install
 ```
 
 The `commit-msg` hook validates commit messages. The `pre-push` hook validates the current branch name. GitHub Actions repeats both checks, validates every commit and the PR title, and runs the test suite, so local hooks are a fast feedback mechanism rather than the only control.
@@ -68,7 +68,7 @@ Prefer several independently releasable PRs over one long-running branch. If a c
 Release Please maintains the release PR from commits already merged into `main`. Do not create release branches, version commits, tags, or changelog sections manually. Review the proposed version and public changelog, then run:
 
 ```bash
-npm run release:check
+bun run release:check
 ```
 
-Merging the green release PR creates the immutable tag and GitHub Release. The package is not yet published to npm; adding npm publication requires the separate trusted-publishing readiness work described in [the release process](docs/release-process.md#npm-publication-roadmap).
+Merging the green release PR creates the immutable tag and GitHub Release. The package is not yet published to npm; adding npm publication requires the separate trusted-publishing readiness work described in [the release process](packages/stackwarden/docs/release-process.md#npm-publication-roadmap).

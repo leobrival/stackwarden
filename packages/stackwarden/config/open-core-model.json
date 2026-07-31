@@ -42,10 +42,7 @@
 			"execution": "local-or-remote",
 			"includedInPackage": false,
 			"description": "Optional licensed rule bundles that may expose summaries while protecting proprietary rule implementation.",
-			"examples": [
-				"organization-specific policy packs",
-				"encrypted benchmark rule bundles"
-			]
+			"examples": ["organization-specific policy packs", "encrypted benchmark rule bundles"]
 		},
 		{
 			"name": "premium-server",
@@ -124,11 +121,7 @@
 				"local findings",
 				"structural signals"
 			],
-			"excludes": [
-				"secret values",
-				"local env values",
-				"full source code by default"
-			]
+			"excludes": ["secret values", "local env values", "full source code by default"]
 		},
 		"cloudResponse": {
 			"license": {

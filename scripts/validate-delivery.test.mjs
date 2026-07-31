@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-	validateBranchName,
-	validateCommitMessage,
-} from "./validate-delivery.mjs";
+import { validateBranchName, validateCommitMessage } from "./validate-delivery.mjs";
 
 test("accepts Conventional Commit subjects used by Release Please", () => {
 	assert.deepEqual(validateCommitMessage("feat(cli): add policy checks\n\nDetails."), []);
@@ -22,10 +19,7 @@ test("accepts short-lived TBD branches and automation branches", () => {
 	assert.deepEqual(validateBranchName("feat/policy-checks"), []);
 	assert.deepEqual(validateBranchName("fix/123-null-output"), []);
 	assert.deepEqual(validateBranchName("ci/trunk-based-delivery"), []);
-	assert.deepEqual(
-		validateBranchName("release-please--branches--main--components--stackwarden"),
-		[],
-	);
+	assert.deepEqual(validateBranchName("release-please--branches--main--components--stackwarden"), []);
 	assert.deepEqual(validateBranchName("dependabot/npm_and_yarn/node-22"), []);
 });
 

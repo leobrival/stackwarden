@@ -4,26 +4,11 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-export const DELIVERY_TYPES = [
-	"feat",
-	"fix",
-	"refactor",
-	"perf",
-	"test",
-	"docs",
-	"build",
-	"ci",
-	"chore",
-	"revert",
-];
+export const DELIVERY_TYPES = ["feat", "fix", "refactor", "perf", "test", "docs", "build", "ci", "chore", "revert"];
 
 const typePattern = DELIVERY_TYPES.join("|");
-const conventionalSubject = new RegExp(
-	`^(${typePattern})(\\([a-z0-9][a-z0-9./-]*\\))?!?: [a-z0-9][^\\r\\n]*$`,
-);
-const topicBranch = new RegExp(
-	`^(${typePattern})/(?:[0-9]+-)?[a-z0-9]+(?:-[a-z0-9]+)*$`,
-);
+const conventionalSubject = new RegExp(`^(${typePattern})(\\([a-z0-9][a-z0-9./-]*\\))?!?: [a-z0-9][^\\r\\n]*$`);
+const topicBranch = new RegExp(`^(${typePattern})/(?:[0-9]+-)?[a-z0-9]+(?:-[a-z0-9]+)*$`);
 const exemptBranch = /^(main|release-please--branches--main--components--[a-z0-9-]+|dependabot\/.*|renovate\/.*)$/;
 
 export function validateCommitMessage(message) {
@@ -31,9 +16,7 @@ export function validateCommitMessage(message) {
 	const errors = [];
 
 	if (!conventionalSubject.test(subject)) {
-		errors.push(
-			`Commit subject must match "type(scope): description". Allowed types: ${DELIVERY_TYPES.join(", ")}.`,
-		);
+		errors.push(`Commit subject must match "type(scope): description". Allowed types: ${DELIVERY_TYPES.join(", ")}.`);
 	}
 	if (subject.length > 100) {
 		errors.push("Commit subject must not exceed 100 characters.");

@@ -1,45 +1,31 @@
 {
-  "name": "stackwarden",
-  "version": "0.2.1",
-  "description": "Terminal-first codebase governance and health CLI.",
-  "type": "module",
-  "bin": {
-    "stackwarden": "src/index.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/leobrival/stackwarden.git"
-  },
-  "files": [
-    "src/index.js",
-    "templates",
-    "features",
-    "docs",
-    "config",
-    "schemas",
-    "scripts",
-    "README.md",
-    "docs/public-cloud-split.md"
-  ],
-  "scripts": {
-    "test": "node --test src/*.test.js scripts/*.test.mjs",
-    "check": "npm test",
-    "release:check": "npm test && npm pack --dry-run",
-    "hooks:install": "git config core.hooksPath .githooks",
-    "delivery:branch": "node scripts/validate-delivery.mjs branch",
-    "delivery:commit": "node scripts/validate-delivery.mjs commit-msg"
-  },
-  "engines": {
-    "node": ">=20.11"
-  },
-  "keywords": [
-    "governance",
-    "codebase",
-    "audit",
-    "cli",
-    "health",
-    "repository"
-  ],
-  "license": "UNLICENSED",
-  "private": false
+	"name": "stackwarden-monorepo",
+	"version": "0.0.0",
+	"private": true,
+	"packageManager": "bun@1.2.12",
+	"engines": {
+		"node": ">=20.11 <23",
+		"bun": "1.2.12"
+	},
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"check": "bun run lint && bun run typecheck && bun run test",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"typecheck": "bun run --filter stackwarden typecheck",
+		"test": "bun run --filter stackwarden test && node --test scripts/*.test.mjs",
+		"release:check": "bun run --filter stackwarden release:check",
+		"hooks:install": "git config core.hooksPath .githooks",
+		"delivery:branch": "node scripts/validate-delivery.mjs branch",
+		"delivery:commit": "node scripts/validate-delivery.mjs commit-msg"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.0",
+		"@types/node": "^22.0.0",
+		"typescript": "^5"
+	}
 }

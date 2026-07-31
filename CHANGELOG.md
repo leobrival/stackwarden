@@ -1,5 +1,9 @@
 # Changelog
 
+All notable changes to StackWarden are documented in this file.
+
+This project uses [Release Please](https://github.com/googleapis/release-please) and [Conventional Commits](https://www.conventionalcommits.org/) to generate changelog entries and GitHub releases. See the [release process](docs/release-process.md) for versioning and publication rules.
+
 ## [0.2.0](https://github.com/leobrival/stackwarden/compare/v0.1.4...v0.2.0) (2026-06-24)
 
 
@@ -10,9 +14,3 @@
 * add generated governance modules ([1504b19](https://github.com/leobrival/stackwarden/commit/1504b196a11ca36251c2995eaa6d082033fb1818))
 * add governance status and local bypass checks ([83ec78c](https://github.com/leobrival/stackwarden/commit/83ec78cc7bd6effe3086adf864bf264ea92837cc))
 * warn on handwritten markdown governance ([8cc4e28](https://github.com/leobrival/stackwarden/commit/8cc4e28b5af952d6e05cb614b8bafc1cea26eba0))
-
-## Changelog
-
-All notable changes to StackWarden will be documented in this file.
-
-This project uses [release-please](https://github.com/googleapis/release-please) and Conventional Commits to generate changelog entries and GitHub releases.
